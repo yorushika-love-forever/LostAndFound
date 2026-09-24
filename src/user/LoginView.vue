@@ -51,9 +51,9 @@ const handleLogin = async () => {
     })
 
     // 保存token 到localStorage
-    localStorage.setItem('token', res.token)
+    localStorage.setItem('token', res.data.token)
     // 保存用户信息
-    localStorage.setItem('userInfo', JSON.stringify(res.user))
+    localStorage.setItem('userInfo', JSON.stringify(res.data.user))
 
     // 登录成功跳转到首页
     router.push('/')
