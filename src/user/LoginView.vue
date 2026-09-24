@@ -92,6 +92,6 @@ input {
   cursor:pointer;
 }
 .error {
-  color:red;
+  color:yellow;
 }
 </style>
