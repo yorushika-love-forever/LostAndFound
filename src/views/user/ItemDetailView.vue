@@ -94,7 +94,7 @@ async function removeComment(id: number) {
         <div v-if="item.supplement"><dt>地点补充</dt><dd>{{ item.supplement }}</dd></div>
         <div><dt>发布时间</dt><dd>{{ formatDate(item.createdAt) }}</dd></div>
         <div><dt>状态</dt><dd>{{ item.isFinished ? '已完成' : itemStatusText(item.status) }}</dd></div>
-        <div><dt>发布者</dt><dd>用户 {{ item.publisherId }}</dd></div>
+        <div><dt>发布者</dt><dd>{{ item.publisherName }}</dd></div>
       </dl>
       <button v-if="item.publisherId !== user?.id && item.status === 'approved' && !item.isFinished" class="primary-button" @click="showClaimForm = !showClaimForm">申请认领 / 召领</button>
       <p v-if="item.publisherId === user?.id" class="muted">这是你发布的信息。</p>
