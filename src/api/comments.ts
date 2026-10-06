@@ -1,4 +1,4 @@
-import { request } from './http'
+import { request, requestAllPages } from './http'
 import type { Comment } from '@/types'
 
 interface BackendComment {
@@ -8,13 +8,6 @@ interface BackendComment {
   author_name?: string
   content: string
   created_at: string
-}
-
-interface PageResult<T> {
-  list: T[]
-  total: number
-  page: number
-  page_size: number
 }
 
 function mapComment(comment: BackendComment): Comment {
@@ -31,8 +24,8 @@ function mapComment(comment: BackendComment): Comment {
 }
 
 export async function getComments(postId: number): Promise<Comment[]> {
-  const data = await request<PageResult<BackendComment>>(`/posts/${postId}/comments?page=1&page_size=100`)
-  return data.list.map(mapComment)
+  const list = await requestAllPages<BackendComment>(`/posts/${postId}/comments`)
+  return list.map(mapComment)
 }
 
 export async function createComment(postId: number, content: string): Promise<Comment> {
