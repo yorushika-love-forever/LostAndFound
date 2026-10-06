@@ -6,6 +6,7 @@ const fallbackImage = '/favicon.ico'
 export interface BackendPost {
   id: number | string
   user_id: number | string
+  author_name?: string
   type: LostItem['type']
   title: string
   content: string
@@ -39,7 +40,9 @@ export function mapPost(post: BackendPost): LostItem {
     status: post.status,
     isFinished: Boolean(post.is_finished),
     publisherId: Number(post.user_id),
-    publisherName: `用户 ${post.user_id}`,
+    // author_name 由后端按 user_id 关联用户表回填（见后端 repository/authorname.go），
+    // 缺失时才退回到显示用户 ID，避免像以前那样永远只显示“用户 1”。
+    publisherName: post.author_name || `用户 ${post.user_id}`,
     createdAt: post.created_at,
     updatedAt: post.updated_at,
   }
