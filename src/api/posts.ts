@@ -1,4 +1,4 @@
-import { request } from './http'
+import { request, requestAllPages } from './http'
 import type { ItemForm, ItemQuery, LostItem } from '@/types'
 
 const fallbackImage = '/favicon.ico'
@@ -18,13 +18,6 @@ export interface BackendPost {
   is_finished: boolean
   created_at: string
   updated_at: string
-}
-
-interface PageResult<T> {
-  list: T[]
-  total: number
-  page: number
-  page_size: number
 }
 
 export function mapPost(post: BackendPost): LostItem {
@@ -48,21 +41,6 @@ export function mapPost(post: BackendPost): LostItem {
   }
 }
 
-// 后端列表接口按页返回，单次只给一页。这里循环把每一页都取完，
-// 避免帖子超过一页(100 条)时列表残缺。
-async function fetchAllPosts(params: URLSearchParams): Promise<BackendPost[]> {
-  const pageSize = 100
-  const all: BackendPost[] = []
-  for (let page = 1; ; page += 1) {
-    params.set('page', String(page))
-    params.set('page_size', String(pageSize))
-    const data = await request<PageResult<BackendPost>>(`/posts?${params.toString()}`)
-    all.push(...data.list)
-    // 取满 total、或本页不足一页(说明已到最后一页)即结束，保证循环一定终止。
-    if (all.length >= data.total || data.list.length < pageSize) return all
-  }
-}
-
 export async function getItems(query: ItemQuery = {}): Promise<LostItem[]> {
   const params = new URLSearchParams()
   if (query.type) params.append('type', query.type)
@@ -70,7 +48,7 @@ export async function getItems(query: ItemQuery = {}): Promise<LostItem[]> {
   // 关键词交给后端按标题模糊搜索（后端 GET /posts 的 keyword 参数，SQL 为 title LIKE）。
   const keyword = query.keyword?.trim()
   if (keyword) params.set('keyword', keyword)
-  const list = await fetchAllPosts(params)
+  const list = await requestAllPages<BackendPost>(`/posts?${params.toString()}`)
   // 地点筛选只匹配地点字段本身。
   // 原来是把"标题+描述+地点+补充说明"拼成一串再 includes，导致按地点筛选会意外命中标题和描述。
   const location = query.location?.trim().toLowerCase() || ''

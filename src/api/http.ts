@@ -39,6 +39,27 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   return envelope.data
 }
 
+// 分页信封：后端所有列表接口统一返回 { list, total, page, page_size }。
+interface PageResult<T> {
+  list: T[]
+  total: number
+  page: number
+  page_size: number
+}
+
+// 后端列表接口是分页的，单次只返回一页。循环把每一页都取完再返回，
+// 避免数据超过一页(pageSize 条)时被截断。
+export async function requestAllPages<T>(path: string, pageSize = 100): Promise<T[]> {
+  const all: T[] = []
+  for (let page = 1; ; page += 1) {
+    const separator = path.includes('?') ? '&' : '?'
+    const data = await request<PageResult<T>>(`${path}${separator}page=${page}&page_size=${pageSize}`)
+    all.push(...data.list)
+    // 取满 total、或本页不足一页(说明已到最后一页)即结束，保证循环一定终止。
+    if (all.length >= data.total || data.list.length < pageSize) return all
+  }
+}
+
 export interface BackendUser {
   id: number | string
   username: string
