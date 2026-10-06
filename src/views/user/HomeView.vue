@@ -41,7 +41,8 @@ onMounted(loadItems)
 
   <section class="toolbar panel">
     <!-- @keyup.enter 表示用户在输入框按回车时执行搜索。 -->
-    <input v-model="query.keyword" placeholder="搜索物品名称、地点或描述" @keyup.enter="loadItems" />
+    <!-- 占位文案只承诺"名称"：后端 keyword 只对 title 做模糊匹配，描述和地点搜不到。 -->
+    <input v-model="query.keyword" placeholder="搜索物品名称" @keyup.enter="loadItems" />
     <input v-model="query.location" placeholder="按地点筛选" @keyup.enter="loadItems" />
     <select v-model="query.type" @change="loadItems">
       <option value="">全部类型</option><option value="lost">寻找失物</option><option value="found">发布招领</option>
