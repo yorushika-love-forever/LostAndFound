@@ -33,8 +33,8 @@ async function submit() {
   <section class="auth-layout">
     <div class="auth-intro">
       <p class="eyebrow">CAMPUS LOST & FOUND</p>
-      <h1>让每一件遗失物，<br /><em>回到它的主人身边。</em></h1>
-      <p>在校园里寻找线索，也把偶然捡到的物品交给正确的人。</p>
+      <h1>让每一件遗失物，<br /><em>回到它的主人身边</em></h1>
+      <p>在校园里寻找线索，也请把捡到的物品还给正确的人</p>
     </div>
     <!-- @submit.prevent：监听表单提交，并阻止浏览器默认刷新行为。 -->
     <form class="panel auth-form" @submit.prevent="submit">
@@ -47,7 +47,7 @@ async function submit() {
       <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
       <!-- :disabled 绑定 loading，登录请求期间按钮不能再次点击。 -->
       <button class="primary-button" :disabled="loading">{{ loading ? '登录中...' : '进入系统' }}</button>
-      <p class="form-tip">请输入后端系统中已经注册的学号和密码。</p>
+      <p class="form-tip">请输入后端系统中已经注册的学号和密码</p>
     </form>
   </section>
 </template>
