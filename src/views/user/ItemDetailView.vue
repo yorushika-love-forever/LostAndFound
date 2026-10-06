@@ -118,7 +118,7 @@ async function removeComment(id: number) {
     <div v-if="commentsLoading" class="empty-state">正在加载留言...</div>
     <div v-else-if="comments.length" class="comment-list">
       <article v-for="comment in comments" :key="comment.id" class="comment-row">
-        <div><strong>用户 {{ comment.userId }}</strong><time>{{ formatDate(comment.createdAt) }}</time><p>{{ comment.content }}</p></div>
+        <div><strong>{{ comment.authorName }}</strong><time>{{ formatDate(comment.createdAt) }}</time><p>{{ comment.content }}</p></div>
         <button v-if="comment.userId === user?.id" class="text-button" :disabled="deletingCommentId === comment.id" @click="removeComment(comment.id)">删除</button>
       </article>
     </div>

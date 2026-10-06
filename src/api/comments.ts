@@ -5,6 +5,7 @@ interface BackendComment {
   id: number | string
   post_id: number | string
   user_id: number | string
+  author_name?: string
   content: string
   created_at: string
 }
@@ -21,6 +22,9 @@ function mapComment(comment: BackendComment): Comment {
     id: Number(comment.id),
     postId: Number(comment.post_id),
     userId: Number(comment.user_id),
+    // author_name 由后端按 user_id 关联用户表回填（见后端 repository/authorname.go），
+    // 缺失时才退回到显示用户 ID。
+    authorName: comment.author_name || `用户 ${comment.user_id}`,
     content: comment.content,
     createdAt: comment.created_at,
   }
