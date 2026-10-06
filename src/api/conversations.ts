@@ -1,4 +1,4 @@
-import { request } from './http'
+import { request, requestAllPages } from './http'
 import { getItem } from './posts'
 import type { ClaimApplication, Conversation, FinishRequest, LostItem } from '@/types'
 
@@ -9,13 +9,6 @@ interface BackendConversation {
   owner_id: number | string
   created_at: string
   updated_at: string
-}
-
-interface PageResult<T> {
-  list: T[]
-  total: number
-  page: number
-  page_size: number
 }
 
 export interface Message {
@@ -76,13 +69,13 @@ function mapFinishRequest(request: BackendFinishRequest): FinishRequest {
 }
 
 export async function getConversations(): Promise<Conversation[]> {
-  const data = await request<PageResult<BackendConversation>>('/conversations?page=1&page_size=100')
-  return data.list.map(mapConversation)
+  const list = await requestAllPages<BackendConversation>('/conversations')
+  return list.map(mapConversation)
 }
 
 export async function getMessages(conversationId: number): Promise<Message[]> {
-  const data = await request<PageResult<BackendMessage>>(`/conversations/${conversationId}/messages?page=1&page_size=100`)
-  return data.list.map(mapMessage).reverse()
+  const list = await requestAllPages<BackendMessage>(`/conversations/${conversationId}/messages`)
+  return list.map(mapMessage).reverse()
 }
 
 export async function sendMessage(conversationId: number, content: string): Promise<Message> {
@@ -123,8 +116,8 @@ export async function createClaim(item: LostItem, reason: string): Promise<Claim
 }
 
 export async function getMyClaims(): Promise<ClaimApplication[]> {
-  const data = await request<PageResult<BackendConversation>>('/conversations?page=1&page_size=100')
-  return Promise.all(data.list.map(async (conversation) => {
+  const list = await requestAllPages<BackendConversation>('/conversations')
+  return Promise.all(list.map(async (conversation) => {
     const mapped = mapConversation(conversation)
     let itemTitle = `帖子 #${mapped.postId}`
     try {
