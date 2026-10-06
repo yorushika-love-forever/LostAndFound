@@ -2,6 +2,7 @@
 import { reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '@/stores/auth'
+import { safeRedirect } from '@/router'
 
 const router = useRouter()
 const route = useRoute()
@@ -15,7 +16,8 @@ async function submit() {
   errorMessage.value = ''
   try {
     await login(form.studentNo, form.password)
-    await router.push('/home')
+    // 登录前被守卫拦下的目标地址会放在 query.redirect 里，登录成功后跳回去。
+    await router.push(safeRedirect(route.query.redirect))
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '登录失败'
   } finally {
