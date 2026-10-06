@@ -71,13 +71,12 @@ export async function getItems(query: ItemQuery = {}): Promise<LostItem[]> {
   const keyword = query.keyword?.trim()
   if (keyword) params.set('keyword', keyword)
   const list = await fetchAllPosts(params)
-  // 后端没有地点查询参数，地点筛选只能留在前端。
+  // 地点筛选只匹配地点字段本身。
+  // 原来是把"标题+描述+地点+补充说明"拼成一串再 includes，导致按地点筛选会意外命中标题和描述。
   const location = query.location?.trim().toLowerCase() || ''
-  return list.map(mapPost).filter((item) => {
-    if (!location) return true
-    const searchable = `${item.title}${item.description}${item.location}${item.supplement}`.toLowerCase()
-    return searchable.includes(location)
-  })
+  return list
+    .map(mapPost)
+    .filter((item) => !location || item.location.toLowerCase().includes(location))
 }
 
 export async function getItem(id: number): Promise<LostItem> {
