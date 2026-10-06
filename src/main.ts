@@ -9,5 +9,5 @@ import '@/styles/user.css'
 // use(router)：把路由插件安装到 Vue 中，这样模板里才能使用 RouterView、RouterLink。
 // mount('#app')：把 Vue 应用挂载到 index.html 里的 <div id="app"> 元素。
 const app = createApp(App)//创建一个应用
-app.use(router)//使用路由器
+app.use(router)//使用路由器，main.ts 的`app.use(router)` — 执行后，Vue 会把这两个组件注册成全局组件，所以任何模板里都能直接写`<RouterLink>` /`<RouterView>`
 app.mount('#app')//挂载整个应用到app容器中
