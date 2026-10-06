@@ -1,8 +1,8 @@
 # 校园失物招领系统
 
-这是项目的学生端前端，使用 Vue 3、TypeScript、Vue Router 和 Vite 编写。后端位于 `LostAndFound/`，使用 Go、Gin、GORM、MySQL 和 JWT。
+这是项目的学生端前端，使用 Vue 3、TypeScript、Vue Router 和 Vite 编写。后端位于(https://github.com/Dream0627/LostAndFound/tree/change_from_yzd)，使用 Go、Gin、GORM、MySQL 和 JWT。
 
-当前前端范围是普通学生用户页面，管理员页面暂未实现。后端接口契约参考 [LostAndFound/frontend-demo/README.md](LostAndFound/frontend-demo/README.md)。
+当前前端范围是普通学生用户页面，管理员页面在另一个branch实现。后端接口契约参考 [LostAndFound/frontend-demo/README.md](LostAndFound/frontend-demo/README.md)。
 
 ## 当前完成情况
 
