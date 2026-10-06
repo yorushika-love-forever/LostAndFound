@@ -52,12 +52,16 @@ export async function getItems(query: ItemQuery = {}): Promise<LostItem[]> {
   const params = new URLSearchParams({ page: '1', page_size: '100' })
   if (query.type) params.append('type', query.type)
   if (query.finished !== undefined) params.set('finished', String(query.finished))
+  // 关键词交给后端按标题模糊搜索（后端 GET /posts 的 keyword 参数，SQL 为 title LIKE）。
+  const keyword = query.keyword?.trim()
+  if (keyword) params.set('keyword', keyword)
   const data = await request<PageResult<BackendPost>>(`/posts?${params.toString()}`)
-  const keyword = query.keyword?.trim().toLowerCase() || ''
+  // 后端没有地点查询参数，地点筛选只能留在前端。
   const location = query.location?.trim().toLowerCase() || ''
   return data.list.map(mapPost).filter((item) => {
+    if (!location) return true
     const searchable = `${item.title}${item.description}${item.location}${item.supplement}`.toLowerCase()
-    return (!keyword || searchable.includes(keyword)) && (!location || searchable.includes(location))
+    return searchable.includes(location)
   })
 }
 
