@@ -1,224 +1,195 @@
+# 校园失物招领系统
 
-# 校园失物招领系统｜学生端前端
+这是项目的学生端前端，使用 Vue 3、TypeScript、Vue Router 和 Vite 编写。后端位于 `LostAndFound/`，使用 Go、Gin、GORM、MySQL 和 JWT。
 
-这是校园失物招领系统的学生端前端，使用 Vue 3、TypeScript、Vue Router 和 Vite 开发。后端完整接口位于 `LostAndFound/`，接口约定和全部后端能力请参考 [frontend-demo/README.md](LostAndFound/frontend-demo/README.md)。
+当前前端范围是普通学生用户页面，管理员页面暂未实现。后端接口契约参考 [LostAndFound/frontend-demo/README.md](LostAndFound/frontend-demo/README.md)。
 
-当前前端只负责普通学生用户界面，管理员页面由其他成员负责。
+## 当前完成情况
 
-## 当前完成进度
-
-学生端已经完成以下主流程：
+学生端已经覆盖以下流程：
 
 ```text
-登录
-  ↓
-进入首页
-  ↓
-查询、搜索、筛选失物/招领信息
-  ↓
-查看物品详情
-  ├─ 发布者：查看自己的帖子状态
-  └─ 其他用户：发起认领/召领对话
-       ↓
-     查看认领记录并发送消息
-
-登录用户还可以：
-  ├─ 发布失物或招领信息
-  ├─ 上传图片
-  ├─ 选择校园地点和补充说明
-  ├─ 查看自己的发布记录
-  └─ 删除自己的帖子
+注册 / 登录
+  -> 浏览失物和招领信息
+  -> 关键字、类型、地点、完成状态筛选
+  -> 查看物品详情和评论
+  -> 发表评论、删除自己的评论
+  -> 发布失物或招领信息
+  -> 上传图片、选择校园地点
+  -> 查看和删除自己的发布记录
+  -> 对他人的帖子发起认领 / 召领
+  -> 进入会话、发送消息
+  -> 发起完成寻找申请、同意或拒绝申请
+  -> 修改个人资料、修改密码、注销账号
 ```
 
-### 已对接的后端接口
+账号异常时还可以从公开的 `/appeal` 页面提交账号申诉。
 
-| 前端功能                 | 接口                                                     |
-| ------------------------ | -------------------------------------------------------- |
-| 登录                     | `POST /api/v1/auth/login`                              |
-| 获取个人资料和自己的帖子 | `GET /api/v1/auth/profile`                             |
-| 查询帖子列表             | `GET /api/v1/posts`                                    |
-| 查询帖子详情             | `GET /api/v1/posts/:post_id`                           |
-| 发布帖子                 | `POST /api/v1/posts`，`multipart/form-data`          |
-| 删除自己的帖子           | `DELETE /api/v1/posts/:post_id`                        |
-| 获取校园地点             | `GET /api/v1/geo/locations`                            |
-| 发起申领/召领对话        | `POST /api/v1/posts/:post_id/conversations`            |
-| 查看我的会话             | `GET /api/v1/conversations`                            |
-| 查看会话消息             | `GET /api/v1/conversations/:conversation_id/messages`  |
-| 发送会话消息             | `POST /api/v1/conversations/:conversation_id/messages` |
+## 前端页面和路由
 
-## 学生端目录
+| 路由                   | 页面                         | 是否需要登录 |
+| ---------------------- | ---------------------------- | ------------ |
+| `/login`             | 登录                         | 否           |
+| `/register`          | 注册                         | 否           |
+| `/appeal`            | 账号申诉                     | 否           |
+| `/home`              | 信息列表、筛选               | 是           |
+| `/items/:id`         | 物品详情、评论、认领入口     | 是           |
+| `/publish`           | 发布失物 / 招领              | 是           |
+| `/mine`              | 我的发布记录                 | 是           |
+| `/mine?tab=claims`   | 我的认领 / 会话记录          | 是           |
+| `/conversations/:id` | 会话消息、完成寻找申请       | 是           |
+| `/profile`           | 个人资料、修改密码、注销账号 | 是           |
+
+## 前端目录
 
 ```text
 src/
 ├── api/
-│   ├── http.ts             # 统一请求、响应信封、Token、401 处理
-│   ├── auth.ts             # 登录、个人资料
-│   ├── posts.ts            # 帖子查询、发布、删除
-│   ├── conversations.ts    # 认领/召领和消息
+│   ├── http.ts             # 统一 fetch、响应信封、JWT、401 处理
+│   ├── auth.ts             # 登录、注册、资料、改密、注销
+│   ├── posts.ts            # 帖子列表、详情、发布、删除
+│   ├── comments.ts         # 评论查询、发表、删除
+│   ├── conversations.ts    # 认领 / 召领、会话、消息、完成申请
+│   ├── appeals.ts          # 公开账号申诉
 │   └── geo.ts              # 校园地点
 ├── components/user/
-│   └── ItemCard.vue        # 首页单条物品卡片
+│   └── ItemCard.vue        # 物品卡片
 ├── layouts/
-│   └── UserLayout.vue      # 学生端顶部导航和页面外壳
-├── views/user/
-│   ├── LoginView.vue       # 登录页
-│   ├── HomeView.vue        # 首页、搜索和筛选
-│   ├── PublishView.vue     # 发布失物/招领
-│   ├── ItemDetailView.vue  # 物品详情和认领入口
-│   ├── MyView.vue          # 我的发布和我的认领
-│   └── ConversationView.vue # 认领沟通
-├── stores/auth.ts          # 当前用户、Token、退出登录
+│   └── UserLayout.vue      # 学生端导航和页面外壳
 ├── router/index.ts         # 学生端路由和登录守卫
-├── types/index.ts          # 用户、帖子、会话等数据类型
-├── utils/format.ts         # 状态和时间格式化
-└── styles/                 # 通用样式和学生端样式
+├── stores/auth.ts          # 当前用户、Token、登录状态
+├── types/index.ts          # 用户、帖子、评论、会话等类型
+├── utils/format.ts         # 时间和状态格式化
+├── styles/                 # 全局样式和学生端样式
+└── views/user/
+    ├── LoginView.vue
+    ├── RegisterView.vue
+    ├── AppealView.vue
+    ├── HomeView.vue
+    ├── ItemDetailView.vue
+    ├── PublishView.vue
+    ├── MyView.vue
+    ├── ConversationView.vue
+    └── ProfileView.vue
 ```
 
-## 页面和接口的完整调用链
+## 已对接的后端接口
 
-### 登录
+前端默认请求前缀为 `/api/v1`，请求会由 Vite 代理到 `http://localhost:8080`。
 
-```text
-LoginView.vue
-  → stores/auth.ts
-  → api/auth.ts
-  → api/http.ts
-  → POST /api/v1/auth/login
-  → 保存 campus-token 和 campus-user
-  → 跳转 /home
-```
+| 前端功能       | 接口                                                                         |
+| -------------- | ---------------------------------------------------------------------------- |
+| 注册           | `POST /api/v1/auth/register`                                               |
+| 登录           | `POST /api/v1/auth/login`                                                  |
+| 查看个人资料   | `GET /api/v1/auth/profile`                                                 |
+| 修改个人资料   | `PATCH /api/v1/auth/profile`                                               |
+| 修改密码       | `PATCH /api/v1/auth/password`                                              |
+| 注销账号       | `DELETE /api/v1/auth/account`                                              |
+| 帖子列表       | `GET /api/v1/posts`                                                        |
+| 帖子详情       | `GET /api/v1/posts/:post_id`                                               |
+| 发布帖子       | `POST /api/v1/posts`，`multipart/form-data`                              |
+| 删除自己的帖子 | `DELETE /api/v1/posts/:post_id`                                            |
+| 校园地点       | `GET /api/v1/geo/locations`                                                |
+| 评论列表       | `GET /api/v1/posts/:post_id/comments`                                      |
+| 发表评论       | `POST /api/v1/comments`                                                    |
+| 删除评论       | `DELETE /api/v1/comments/:comment_id`                                      |
+| 申领 / 召领    | `POST /api/v1/posts/:post_id/conversations`                                |
+| 会话列表       | `GET /api/v1/conversations`                                                |
+| 会话消息       | `GET /api/v1/conversations/:conversation_id/messages`                      |
+| 发送消息       | `POST /api/v1/conversations/:conversation_id/messages`                     |
+| 发起完成申请   | `POST /api/v1/conversations/:conversation_id/finish-requests`              |
+| 处理完成申请   | `PATCH /api/v1/conversations/:conversation_id/finish-requests/:request_id` |
+| 账号申诉       | `POST /api/v1/appeals`                                                     |
 
-后端响应遵循统一信封：
-
-```json
-{
-  "code": 0,
-  "msg": "success",
-  "data": {
-    "access_token": "...",
-    "user": {
-      "id": 1,
-      "username": "20240001",
-      "name": "张三",
-      "role": "student"
-    }
-  }
-}
-```
-
-后续需要登录的请求会自动携带：
+前端会自动保存 `campus-token`，需要登录的请求会携带：
 
 ```http
-Authorization: Bearer <campus-token>
+Authorization: Bearer <access_token>
 ```
 
-### 首页
-
-```text
-HomeView.vue
-  → getItems(query)
-  → GET /api/v1/posts?page=1&page_size=100
-  → 前端按关键字和地点过滤
-  → ItemCard.vue 渲染列表
-```
-
-支持的筛选条件：
-
-- 关键字：标题、描述、地点、地点补充说明
-- 类型：`lost` 失物、`found` 招领
-- 完成状态：未完成、已完成、全部
-
-### 发布
-
-```text
-PublishView.vue
-  → 选择类型、标题、描述、校园地点、图片
-  → 组装 FormData
-  → POST /api/v1/posts
-  → 后端返回 pending
-  → 跳转 /mine
-```
-
-发布接口是 `multipart/form-data`，不能手动设置 `Content-Type`，浏览器需要自动生成 boundary。
-
-### 详情和认领
-
-```text
-ItemDetailView.vue
-  → GET /api/v1/posts/:post_id
-  → 显示物品详情
-  → POST /api/v1/posts/:post_id/conversations
-  → POST /api/v1/conversations/:conversation_id/messages
-  → 跳转会话页面
-```
-
-当前后端把“认领申请”设计为“申领/召领对话”。前端会把用户填写的认领依据作为会话中的第一条消息发送。
-
-### 我的记录
-
-```text
-MyView.vue
-  ├─ GET /api/v1/auth/profile
-  │    → 我的发布
-  ├─ GET /api/v1/conversations
-  │    → 我的认领/会话
-  └─ DELETE /api/v1/posts/:post_id
-       → 删除自己的帖子
-```
+当前后端帖子模型没有独立的联系方式字段，因此学生端没有伪造或提交 `contact` 字段。
 
 ## 本地运行
 
-安装依赖：
+### 1. 前置条件
 
-```sh
-npm install
+- Node.js 22 或更高版本
+- Go 环境
+- MySQL 数据库
+
+### 2. 启动后端和数据库
+
+进入后端目录：
+
+```powershell
+cd "C:\Users\周杨浩\Desktop\hello_vue3\LostAndFound"
 ```
 
-启动前端：
+首次运行时：
 
-```sh
+1. 复制 `config/config.example.yaml` 为 `config/config.yaml`。
+2. 在 `config/config.yaml` 中填写 MySQL 连接信息和 JWT secret。
+3. 按后端 README 的说明执行 `migrations/tables.sql` 建表。
+4. 启动后端：
+
+```powershell
+go run main.go
+```
+
+后端默认地址：
+
+```text
+http://localhost:8080
+```
+
+### 3. 启动前端
+
+另开一个终端，进入前端根目录：
+
+```powershell
+cd "C:\Users\周杨浩\Desktop\hello_vue3"
+npm install
 npm run dev
 ```
 
-默认地址：
+前端默认地址：
 
 ```text
 http://127.0.0.1:5173/
 ```
 
-Vite 会把以下请求代理到后端 `http://localhost:8080`：
+开发环境中，Vite 会把 `/api` 和 `/uploads` 代理到后端 `http://localhost:8080`。
 
-```text
-/api
-/uploads
-```
+## 验证命令
 
-启动后端后，前端才能正常登录和读取数据。
-
-## 当前边界和下一步
-
-当前没有在学生端实现：
-
-- 失物招领管理员页面
-- 系统管理员页面
-- 公告管理
-- 全校统计图表
-- 管理员审核页面
-
-这些功能属于其他成员负责的管理端范围。
-
-另外，当前后端帖子模型和发布接口没有返回独立的联系方式字段，因此学生端暂时没有伪造联系方式。若后端后续增加 `contact` 字段，再在 `types/index.ts`、`api/posts.ts` 和 `PublishView.vue` 中补充即可。
-
-## 检查命令
-
-类型检查：
-
-```sh
+```powershell
 npm run type-check
-```
-
-生产构建：
-
-```sh
 npm run build
 ```
+
+当前两条命令均已通过。生产构建文件输出到 `dist/`。
+
+## 当前未完成范围
+
+以下内容属于管理员端，不在当前学生端实现范围内：
+
+- 失物招领管理员页面
+- 帖子审核和状态管理页面
+- 系统管理员账号管理
+- 公告管理
+- 全校数据总览和统计图表
+- 管理员申诉审核
+
+## 是否需要同时启动前后端服务器？
+
+开发和联调时需要同时启动：
+
+```text
+前端 Vite： http://127.0.0.1:5173
+后端 API：  http://localhost:8080
+数据库：    MySQL
+```
+
+原因是前端页面只是界面，登录、帖子、评论、会话和账号数据都由后端 API 提供，后端又依赖 MySQL。
+
+如果只想查看静态页面，可以只运行 `npm run dev`；但登录和所有真实数据功能都会因为没有后端而失败。部署时也不一定要把两者放在同一台云服务器上，但必须保证前端能够访问后端 API，并正确配置跨域或反向代理。
