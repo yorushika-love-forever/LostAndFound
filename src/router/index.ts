@@ -12,15 +12,13 @@ import { useAuth } from '@/stores/auth'
 // 给路由 meta 补充类型说明，这样在守卫里写 to.meta.title 也会有类型提示。
 declare module 'vue-router' {
   interface RouteMeta {
-    // 标记“这个页面必须登录后才能访问”
     requiresAuth?: boolean
-    // 浏览器标签页标题
     title?: string
   }
 }
 
 // 没配置 title 时使用的默认标签页标题。
-const DEFAULT_TITLE = '找光 · 校园失物招领'
+const DEFAULT_TITLE = '找光 · 校园失物招领平台'
 
 /**
  * 从 query.redirect 中取出「安全的站内路径」。
@@ -110,7 +108,8 @@ const router = createRouter({
 
 // 路由守卫会在每次页面跳转前执行，常用于检查登录权限。
 // 返回值的含义：什么都不返回（undefined）表示「放行」；返回字符串或 { path, query } 对象表示「改道」。
-router.beforeEach((to) => {
+router.beforeEach((to) => {//全局守卫
+  
   const auth = useAuth()
   const token = localStorage.getItem('campus-token')
 
