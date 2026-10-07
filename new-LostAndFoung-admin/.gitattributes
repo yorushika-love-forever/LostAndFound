@@ -1,0 +1,13 @@
+# 管理端子项目统一使用 LF，避免 Windows 与 Linux 提交时反复转换。
+* text=auto
+
+*.ts text eol=lf
+*.vue text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+
+# PowerShell 脚本保持 Windows 习惯的 CRLF。
+*.ps1 text eol=crlf
