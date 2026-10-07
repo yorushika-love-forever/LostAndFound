@@ -2,21 +2,27 @@
  * 会话（私信）与「认领/完结」流程相关接口：会话列表、消息收发、完结申请与审核、发起认领。
  *
  * 使用方：消息/会话页、帖子详情页（点击「联系失主/认领」）、我的认领列表。
- * 依赖：./http 的 request()/requestAllPages()，以及 ./posts 的 getItem()（用于补全会话的帖子标题）。
+ * 依赖：./http 的 request()/requestAllPages()。
  * 后端路由挂在 /conversations 与 /posts/:id/conversations 下。
- * 对外导出：Message 类型及 getConversations、getMessages、sendMessage、
+ * 对外导出：Message 类型及 getConversations、getConversationDetail、getMessages、sendMessage、
  * createFinishRequest、reviewFinishRequest、withdrawFinishRequest、createClaim、getMyClaims。
  */
 import { request, requestAllPages } from './http'
-import { getItem } from './posts'
 import type { ClaimApplication, Conversation, FinishRequest, LostItem } from '@/types'
 
-/** 后端会话结构（snake_case）：initiator_id 是发起方，owner_id 是帖子发布者。 */
+/**
+ * 后端会话结构（snake_case）：initiator_id 是发起方，owner_id 是帖子发布者。
+ * post_title / post_status / post_is_finished 是后端按 post_id 实时回填的帖子快照
+ * （非数据库字段），会话列表与详情接口都会带上；帖子已删除时这些字段为零值。
+ */
 interface BackendConversation {
   id: number | string
   post_id: number | string
   initiator_id: number | string
   owner_id: number | string
+  post_title?: string
+  post_status?: Conversation['postStatus']
+  post_is_finished?: boolean
   created_at: string
   updated_at: string
 }
@@ -52,7 +58,8 @@ interface BackendFinishRequest {
 /**
  * 把后端会话映射为前端 Conversation（snake_case → camelCase）。
  * @param conversation 后端返回的会话
- * @returns 前端 Conversation；post_id→postId、initiator_id→initiatorId、owner_id→ownerId。
+ * @returns 前端 Conversation；post_id→postId、initiator_id→initiatorId、owner_id→ownerId，
+ *          帖子快照 post_title/post_status/post_is_finished → postTitle/postStatus/postIsFinished。
  */
 function mapConversation(conversation: BackendConversation): Conversation {
   return {
@@ -60,6 +67,10 @@ function mapConversation(conversation: BackendConversation): Conversation {
     postId: Number(conversation.post_id),
     initiatorId: Number(conversation.initiator_id),
     ownerId: Number(conversation.owner_id),
+    // 帖子快照字段可能缺失（如建会话接口不回填、帖子已被删除），统一兜底成「空」而不是 undefined。
+    postTitle: conversation.post_title || '',
+    postStatus: conversation.post_status || '',
+    postIsFinished: Boolean(conversation.post_is_finished),
     createdAt: conversation.created_at,
     updatedAt: conversation.updated_at,
   }
@@ -104,6 +115,20 @@ function mapFinishRequest(request: BackendFinishRequest): FinishRequest {
 export async function getConversations(): Promise<Conversation[]> {
   const list = await requestAllPages<BackendConversation>('/conversations')
   return list.map(mapConversation)
+}
+
+/**
+ * 获取单个会话详情（含所属帖子的标题/状态/完成情况快照）：GET /api/v1/conversations/:conversationId
+ *
+ * 仅会话参与方（发起方或帖子作者）可读，其他人后端会按「会话不存在」处理。
+ * 聊天页据此展示帖子标题、跳转原帖，并在帖子已完成时隐藏「申请完成寻找」入口——
+ * 这正是之前用 getItem 绕路拿标题的替代方案。
+ * @param conversationId 会话 ID
+ * @returns 带帖子快照的 Conversation
+ * @throws 非参与方、会话不存在或接口失败时抛 Error(后端 msg)
+ */
+export async function getConversationDetail(conversationId: number): Promise<Conversation> {
+  return mapConversation(await request<BackendConversation>(`/conversations/${conversationId}`))
 }
 
 /**
@@ -207,32 +232,26 @@ export async function createClaim(item: LostItem, reason: string): Promise<Claim
 }
 
 /**
- * 获取当前用户的认领列表：GET /api/v1/conversations（再逐条补帖子标题）
+ * 获取当前用户的认领列表：GET /api/v1/conversations
  *
- * 复用会话列表，并为每个会话并发查一次帖子详情以拿标题。
- * @returns ClaimApplication 数组（reason 为空，标题尽力回填）
- * @throws 会话列表请求失败时抛 Error；单条帖子查询失败会被 try/catch 吞掉，不影响整表。
+ * 会话列表接口本身已带上帖子标题快照（post_title），直接取用即可；
+ * 不再像以前那样为每条会话再查一次帖子详情（那是没有会话详情接口时的绕路做法）。
+ * @returns ClaimApplication 数组（reason 为空，标题取自帖子快照）
+ * @throws 会话列表请求失败时抛 Error
  */
 export async function getMyClaims(): Promise<ClaimApplication[]> {
   const list = await requestAllPages<BackendConversation>('/conversations')
-  // 用 Promise.all + async 映射并发拉取各会话对应的帖子标题，比串行 for 循环更快。
-  return Promise.all(list.map(async (conversation) => {
+  return list.map((conversation) => {
     const mapped = mapConversation(conversation)
-    // 先给出「帖子 #N」的兜底标题，万一详情查不到也不会显示空白。
-    let itemTitle = `帖子 #${mapped.postId}`
-    try {
-      itemTitle = (await getItem(mapped.postId)).title
-    } catch {
-      // 已删除或不可见的帖子不应该隐藏这条会话记录。
-    }
     return {
       id: mapped.id,
       itemId: mapped.postId,
-      itemTitle,
+      // 帖子快照缺失（帖子已删除）时回落到「帖子 #N」，避免列表出现空标题。
+      itemTitle: mapped.postTitle || `帖子 #${mapped.postId}`,
       reason: '',
       // as const 让 TS 把字面量收窄成 'active'，匹配 ClaimApplication.status 的联合类型。
       status: 'active' as const,
       createdAt: mapped.createdAt,
     }
-  }))
+  })
 }

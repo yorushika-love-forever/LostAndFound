@@ -93,6 +93,13 @@ export interface Conversation {
   initiatorId: number
   // 物品发布者用户 id
   ownerId: number
+  // 帖子标题快照：后端按 postId 实时回填（非数据库字段），帖子已删除时为空串。
+  // 有了它，聊天页与「我的认领」列表不必再额外请求帖子详情就能显示标题。
+  postTitle: string
+  // 帖子审核状态快照（帖子已删除时为空串）
+  postStatus: ItemStatus | ''
+  // 帖子是否已完成：聊天页据此隐藏「申请完成寻找」入口，避免重复发起
+  postIsFinished: boolean
   // 创建时间
   createdAt: string
   // 最近更新时间（有新消息时会刷新，常用于排序）

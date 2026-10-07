@@ -4,23 +4,28 @@
  * 页面作用：展示某条认领会话里的全部消息，支持发送新消息，
  * 并提供“完成寻找申请”的发起与同意/拒绝操作。
  *
- * 依赖接口：getMessages(会话id) 取历史消息、sendMessage(会话id, 文本) 发消息、
+ * 依赖接口：getConversationDetail(会话id) 取会话详情（含帖子标题/完成情况快照）、
+ *          getMessages(会话id) 取历史消息、sendMessage(会话id, 文本) 发消息、
  *          createFinishRequest 发起完成申请、reviewFinishRequest 处理（同意/拒绝）申请、
  *          withdrawFinishRequest 撤回自己发起的完成申请。
- * 主要交互：进入即拉取消息；填写消息并提交；发起/审批/撤回完成申请。
+ * 主要交互：进入即拉取会话详情与消息；填写消息并提交；发起/审批/撤回完成申请。
  */
 <script setup lang="ts">
-// ref 创建响应式状态；onMounted 注册“组件挂载后”的回调（这里用来加载消息）。
+// ref 创建响应式状态；onMounted 注册“组件挂载后”的回调（这里用来加载会话详情与消息）。
 import { onMounted, ref } from 'vue'
 // 只用到 useRoute 读取路由参数 :id，本页没有编程式跳转需求。
 import { useRoute } from 'vue-router'
-// 会话接口与 Message 类型；注意 Message 是 type-only 导入，编译后会被擦除。
-import { createFinishRequest, getMessages, reviewFinishRequest, sendMessage, withdrawFinishRequest, type Message } from '@/api/conversations'
+// 会话接口；Message 是 type-only 导入，编译后会被擦除。
+import { createFinishRequest, getConversationDetail, getMessages, reviewFinishRequest, sendMessage, withdrawFinishRequest, type Message } from '@/api/conversations'
+// Conversation 类型定义在全局 @/types 中（与后端会话结构一一对应）。
+import type { Conversation } from '@/types'
 // 全局登录态：user 用来判断每条消息是不是“我”发出的。
 import { useAuth } from '@/stores/auth'
 
 const route = useRoute()
 const { user } = useAuth()
+// 会话详情（含帖子快照）。可能为 undefined：接口失败时模板用可选链兜底。
+const conversation = ref<Conversation>()
 // 消息列表。getMessages 内部已把后端返回的时间倒序翻成正序（见 api/conversations.ts 的 reverse）。
 const messages = ref<Message[]>([])
 // 输入框内容，配合模板里的 v-model 做双向绑定。
@@ -31,17 +36,19 @@ const sending = ref(false)
 const errorMessage = ref('')
 const finishLoading = ref(false)
 const finishMessage = ref('')
-// 路由参数 :id 是字符串，转成数字再用于接口；非法值（NaN）会在 loadMessages 里被拦截。
+// 路由参数 :id 是字符串，转成数字再用于接口；非法值（NaN）会在 loadConversation 里被拦截。
 const conversationId = Number(route.params.id)
 
 /**
- * 拉取本会话的历史消息。
- * 触发方式：组件挂载时（onMounted(loadMessages)）。
+ * 拉取本会话详情与历史消息。
+ * 触发方式：组件挂载时（onMounted(loadConversation)）。
  * 若 :id 解析不出有效数字，直接报错并结束加载，避免发出 /conversations/NaN/messages 这种请求。
- * 成功后写入 messages；失败写入 errorMessage；无论如何在 finally 关闭 loading。
+ * 两个请求互不依赖，用 Promise.all 并发拉取，比串行 await 更快。
+ * 成功后分别写入 conversation / messages；失败写入 errorMessage；
+ * 无论如何在 finally 关闭 loading（失败时也要关，否则会永远停在“正在加载”）。
  * 注：消息的正序由 getMessages 内部完成 reverse，视图层拿到后直接用即可，无需再处理。
  */
-async function loadMessages() {
+async function loadConversation() {
   if (!conversationId) {
     // NaN 或 0 都属于非法会话编号。
     errorMessage.value = '会话地址无效'
@@ -49,9 +56,12 @@ async function loadMessages() {
     return
   }
   try {
-    messages.value = await getMessages(conversationId)
+    // 会话详情里带有帖子标题与完成状态快照，聊天页据此展示标题、跳转原帖并决定是否隐藏「申请完成」入口。
+    const [detail, messageList] = await Promise.all([getConversationDetail(conversationId), getMessages(conversationId)])
+    conversation.value = detail
+    messages.value = messageList
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : '消息加载失败'
+    errorMessage.value = error instanceof Error ? error.message : '会话加载失败'
   } finally {
     loading.value = false
   }
@@ -143,14 +153,23 @@ async function withdrawFinish() {
   }
 }
 
-// 挂载后立即加载消息（loading 初值为 true，会先显示“正在加载消息...”）。
-onMounted(loadMessages)
+// 挂载后立即加载会话详情与消息（loading 初值为 true，会先显示“正在加载消息...”）。
+onMounted(loadConversation)
 </script>
 
 <template>
   <!-- 整页根容器；下面 section-heading 是标题栏，含“返回我的记录”路由链接 -->
   <section class="conversation-page">
     <div class="section-heading"><div><p class="eyebrow">CONVERSATION</p><h1>认领沟通</h1></div><RouterLink to="/mine" class="secondary-button">返回我的记录</RouterLink></div>
+    <!-- 帖子快照：标题与完成状态由会话详情接口一并返回（后端按 post_id 实时回填），
+         因此这里不必再单独调 getItem 去查帖子，点标题可直接跳到原帖。
+         postTitle 为空说明帖子已被删除，此时退化成「帖子 #id」并不可点。 -->
+    <p v-if="conversation" class="conversation-post">
+      <span>关于帖子：</span>
+      <RouterLink v-if="conversation.postTitle" :to="`/items/${conversation.postId}`" class="detail-link">{{ conversation.postTitle }}</RouterLink>
+      <span v-else class="muted">帖子 #{{ conversation.postId }}（已删除）</span>
+      <span v-if="conversation.postIsFinished" class="status-pill">已完成</span>
+    </p>
     <div class="panel conversation-panel">
       <!-- 三态渲染：加载中 → 无消息空态 → 消息列表（v-else 里用 v-for 遍历，:key=message.id） -->
       <div v-if="loading" class="empty-state">正在加载消息...</div>
@@ -166,7 +185,9 @@ onMounted(loadMessages)
       <!-- 完成寻找操作区：申请由一方发起，另一方点同意/拒绝处理，发起方本人可撤回；
            所有按钮在请求中用 finishLoading 禁用，避免并发操作。 -->
       <div class="conversation-actions">
-        <button class="secondary-button" :disabled="finishLoading" @click="requestFinish">申请完成寻找</button>
+        <!-- 帖子已完成时不再显示「申请完成寻找」：这正是会话详情接口回填 postIsFinished 的用途，
+             避免对一个已经完成的帖子反复发起申请。 -->
+        <button v-if="!conversation?.postIsFinished" class="secondary-button" :disabled="finishLoading" @click="requestFinish">申请完成寻找</button>
         <button class="secondary-button" :disabled="finishLoading" @click="reviewFinish('agreed')">同意完成申请</button>
         <button class="text-button" :disabled="finishLoading" @click="reviewFinish('rejected')">拒绝完成申请</button>
         <button class="text-button" :disabled="finishLoading" @click="withdrawFinish">撤回完成申请</button>

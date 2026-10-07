@@ -13,6 +13,8 @@
 .image-preview { display: flex; align-items: center; gap: 12px; margin: -4px 0 18px; color: #718078; font-size: 13px; }
 .image-preview img { width: 96px; height: 72px; object-fit: cover; border: 1px solid #d4d8cf; }
 .conversation-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+/* 聊天页顶部的帖子快照行：把「帖子标题 + 完成标签」并排展示。 */
+.conversation-post { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; color: #718078; font-size: 14px; margin-bottom: 18px; }
 /* 详情页「收藏 / 取消收藏」按钮所在行：与下方认领按钮保持同样的间距节奏。 */
 .detail-actions { display: flex; align-items: center; gap: 12px; margin: 4px 0 14px; }
 /* 发布页「一键定位」按钮行：紧跟在地点下拉框下方，用负外边距抵消 label 的底部间距。 */
