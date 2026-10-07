@@ -49,6 +49,14 @@ function handleLogout() {
              所以高亮时要同时判断 path 和 query.tab，才能只让其中一项点亮。 -->
         <RouterLink to="/mine?tab=claims" :class="{ active: route.path === '/mine' && route.query.tab === 'claims' }">消息</RouterLink>
         <RouterLink to="/profile" :class="{ active: route.path === '/profile' }">个人资料</RouterLink>
+        <!-- 管理后台入口。这里刻意用普通 <a href> 而不是上面那种 <RouterLink>，原因：
+             管理端是「另一个独立的 Vue 应用」，由 Caddy 挂在 /admin/ 下，并不在学生端的路由表里。
+             若写成 RouterLink，vue-router 会拿 /admin/login 去匹配学生端路由，最终命中路由表
+             最后那条 404 兜底（/:pathMatch(.*)*）而渲染出「页面不存在」。
+             用 <a href> 则会触发一次整页跳转，由浏览器向服务器请求，交给 Caddy 把管理端加载出来。
+             target="_blank" 开新标签页：学生端这边的登录状态和页面都保留着，演示时方便来回切换；
+             两个应用用不同的 localStorage key 存 token（campus-token / admin-token），互不干扰。 -->
+        <a href="/admin/login" target="_blank" rel="noopener" class="admin-entry">管理后台</a>
         <!-- {{ }} 是插值，把用户名渲染成文本；user?.name 使用可选链，
              即使 user 暂时为空也不会报错，只会渲染成空白。 -->
         <span class="user-name">{{ user?.name }}</span>

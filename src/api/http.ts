@@ -36,7 +36,25 @@ function authHeaders(): HeadersInit {
  * @returns 信封中的 data 字段（按类型 T 断言）。
  * @throws 响应非合法 JSON 时抛「服务器响应异常」；HTTP 非 2xx 或信封 code !== 0 时抛 Error(msg)。
  */
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {/*## 函数 1：request()（api/http.ts）
+【技术链】
+
+页面组件 → 调`api/posts.ts` 的`getPosts()` → 它内部调`request('/posts')` →`request` 先从`localStorage` 读`campus-token` 拼`Authorization: Bearer` 头 → 调浏览器原生`fetch('/api/v1/posts')` （Caddy 反代到后端）→ 拿到`{code, msg, data}` 信封 → 判断`code===0` 就返回`data` ，否则抛错 → 页面`await` 拿到数据直接渲染。整个链路里页面 永远不需要知道 token、后端地址、信封格式 ，全被这个函数封装掉了。
+
+【为什么这么做】
+
+我当时的考虑是三个"统一"：
+
+1. 统一鉴权 ：每个请求都要带 token，散落在每个接口函数里就会有漏写的风险，集中在`authHeaders()` 里注入，就不存在"某个接口忘了带 token"的问题；
+2. 统一错误处理 ：后端有个特点——业务错误（比如密码错）也返回 HTTP 200，只在`code` 字段里标非 0。如果每个页面自己判断`response.ok` ，就会把"密码错误"当成成功。所以在`request` 里做`!response.ok || envelope.code !== 0` 的 双重判定 ，页面就只需要`try/catch` ，不用关心状态码和业务码的区别；
+3. 统一解包 ：页面拿到的直接是`data` ，不会出现`.data.data` 这种层层剥壳，调用方代码更干净。
+另外 401 那里我没有直接`router.push('/login')` ，而是发了一个`auth-expired` 自定义事件。因为`http.ts` 不应该依赖`router` （避免循环依赖），用事件解耦，`stores/auth.ts` 监听事件去清登录态，职责更清晰。
+
+【可以优化的地方】
+
+- 现在 没有请求取消机制 。比如用户在帖子列表快速切换筛选条件，上一个请求还没回来就发了下一个，旧请求后到会覆盖新数据。可以用`AbortController` 在发新请求时取消上一个；
+- 没有重试 。网络抖动导致的偶发失败直接抛给用户，体验不好，可以对 5xx 和网络错误加 1-2 次指数退避重试；
+- 错误信息直接把`envelope.msg` 抛出去，页面拿到的是字符串，不好做国际化或分类提示。可以抛一个自定义`ApiError` 类，带上`code` ，页面就能按错误码做不同处理。*/
   const headers = new Headers(init.headers)
   // 把鉴权头合并进来（后写入，调用方即使误传同名头也会被登录态覆盖）。
   Object.entries(authHeaders()).forEach(([key, value]) => headers.set(key, value))

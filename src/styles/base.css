@@ -11,7 +11,12 @@ a { color: inherit; text-decoration: none; }
 .topbar { height: 76px; display: flex; align-items: center; justify-content: space-between; max-width: 1180px; margin: auto; padding: 0 28px; border-bottom: 1px solid #d8d5ca; }
 .brand { font: 700 23px 'Noto Serif SC', serif; letter-spacing: 1px; } .brand span { font: 400 12px 'DM Sans'; letter-spacing: 0; margin-left: 9px; color: #789083; }
 .nav-links { display: flex; align-items: center; gap: 24px; font-size: 14px; color: #718078; } .nav-links a.active { color: #264f41; font-weight: 700; } .user-name { color: #32463e; border-left: 1px solid #d8d5ca; padding-left: 24px; }
-.text-button { border: 0; background: transparent; color: #9a6755; } .page-container { max-width: 1180px; margin: auto; padding: 62px 28px 90px; }
+.text-button { border: 0; background: transparent; color: #9a6755; }
+/* 「管理后台」入口：用描边胶囊样式和普通导航项区分开，演示时一眼能找到；配色沿用主题深绿。
+   color 需要显式声明，否则会继承 .nav-links 的灰色，显得像个已经点不了的普通链接。 */
+.admin-entry { padding: 5px 13px; border: 1px solid #264f41; border-radius: 999px; color: #264f41; font-size: 13px; }
+.admin-entry:hover { background: #264f41; color: #fffdf9; }
+.page-container { max-width: 1180px; margin: auto; padding: 62px 28px 90px; }
 .eyebrow { color: #b2785c; font-size: 11px; letter-spacing: 2px; font-weight: 700; margin: 0 0 12px; } h1, h2, h3, p { margin-top: 0; } h1, h2 { font-family: 'Noto Serif SC', serif; } h1 { font-size: clamp(34px, 5vw, 64px); line-height: 1.15; margin-bottom: 16px; } h2 { font-size: 30px; } h3 { font-size: 19px; margin: 12px 0 8px; }
 /* 首页头部用 flex 把标题和主要按钮放在两侧。 */
 .hero-section { min-height: 270px; display: flex; align-items: end; justify-content: space-between; padding-bottom: 50px; } .hero-subtitle, .page-lead { color: #718078; font-size: 16px; } .primary-button, .secondary-button { display: inline-flex; align-items: center; justify-content: center; border-radius: 3px; padding: 13px 20px; border: 1px solid transparent; font-weight: 700; transition: transform .2s, background .2s; } .primary-button { background: #285b4c; color: #fff; } .primary-button:hover { background: #1e463b; transform: translateY(-2px); } .secondary-button { background: transparent; color: #285b4c; border-color: #b8c4bb; }

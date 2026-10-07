@@ -6,9 +6,12 @@
  *
  * 依赖接口：getConversationDetail(会话id) 取会话详情（含帖子标题/完成情况快照）、
  *          getMessages(会话id) 取历史消息、sendMessage(会话id, 文本) 发消息、
- *          createFinishRequest 发起完成申请、reviewFinishRequest 处理（同意/拒绝）申请、
- *          withdrawFinishRequest 撤回自己发起的完成申请。
- * 主要交互：进入即拉取会话详情与消息；填写消息并提交；发起/审批/撤回完成申请。
+ *          createFinishRequest 发起完成申请、getPendingFinishRequest 查询当前待处理的完成申请、
+ *          reviewFinishRequest 处理（同意/拒绝）申请、withdrawFinishRequest 撤回自己发起的完成申请。
+ * 主要交互：进入即拉取会话详情、消息列表与待处理完成申请；填写消息并提交；
+ *          再按「有无待办申请 + 是谁发起的」渲染状态条，提供发起/同意/拒绝/撤回。
+ * 注意：后端在完成申请被发起/同意/拒绝/撤回时会往会话里写一条 senderId 为 null 的「系统消息」，
+ *      本页把它们渲染成居中的灰色提示条，而不是某一侧的正常聊天气泡。
  */
 <script setup lang="ts">
 // ref 创建响应式状态；onMounted 注册“组件挂载后”的回调（这里用来加载会话详情与消息）。
@@ -16,9 +19,9 @@ import { onMounted, ref } from 'vue'
 // 只用到 useRoute 读取路由参数 :id，本页没有编程式跳转需求。
 import { useRoute } from 'vue-router'
 // 会话接口；Message 是 type-only 导入，编译后会被擦除。
-import { createFinishRequest, getConversationDetail, getMessages, reviewFinishRequest, sendMessage, withdrawFinishRequest, type Message } from '@/api/conversations'
+import { createFinishRequest, getConversationDetail, getMessages, getPendingFinishRequest, reviewFinishRequest, sendMessage, withdrawFinishRequest, type Message } from '@/api/conversations'
 // Conversation 类型定义在全局 @/types 中（与后端会话结构一一对应）。
-import type { Conversation } from '@/types'
+import type { Conversation, FinishRequest } from '@/types'
 // 全局登录态：user 用来判断每条消息是不是“我”发出的。
 import { useAuth } from '@/stores/auth'
 
@@ -36,15 +39,19 @@ const sending = ref(false)
 const errorMessage = ref('')
 const finishLoading = ref(false)
 const finishMessage = ref('')
+// 当前待处理的「完成寻找」申请，null 表示没有待办。后端的申请编号不会出现在界面上，
+// 所以「同意/拒绝/撤回」必须先用它查出来、再带着里面的 id 调接口，不能靠用户手输编号。
+// 同一会话同一时刻后端最多只允许一条 pending 申请，故用单个 ref 而不是数组。
+const pendingRequest = ref<FinishRequest | null>(null)
 // 路由参数 :id 是字符串，转成数字再用于接口；非法值（NaN）会在 loadConversation 里被拦截。
 const conversationId = Number(route.params.id)
 
 /**
- * 拉取本会话详情与历史消息。
+ * 拉取本会话详情、历史消息与当前待处理的完成申请。
  * 触发方式：组件挂载时（onMounted(loadConversation)）。
  * 若 :id 解析不出有效数字，直接报错并结束加载，避免发出 /conversations/NaN/messages 这种请求。
- * 两个请求互不依赖，用 Promise.all 并发拉取，比串行 await 更快。
- * 成功后分别写入 conversation / messages；失败写入 errorMessage；
+ * 三个请求互不依赖，用 Promise.all 并发拉取，比串行 await 更快。
+ * 成功后分别写入 conversation / messages / pendingRequest；失败写入 errorMessage；
  * 无论如何在 finally 关闭 loading（失败时也要关，否则会永远停在“正在加载”）。
  * 注：消息的正序由 getMessages 内部完成 reverse，视图层拿到后直接用即可，无需再处理。
  */
@@ -56,14 +63,45 @@ async function loadConversation() {
     return
   }
   try {
-    // 会话详情里带有帖子标题与完成状态快照，聊天页据此展示标题、跳转原帖并决定是否隐藏「申请完成」入口。
-    const [detail, messageList] = await Promise.all([getConversationDetail(conversationId), getMessages(conversationId)])
+    // 会话详情里带有帖子标题与完成状态快照，聊天页据此展示标题、跳转原帖并决定是否隐藏「申请完成」入口；
+    // 待办申请一并查出来，页面一进来就能显示「等待对方处理」或「对方申请完成，是否同意」。
+    const [detail, messageList, pending] = await Promise.all([
+      getConversationDetail(conversationId),
+      getMessages(conversationId),
+      getPendingFinishRequest(conversationId),
+    ])
     conversation.value = detail
     messages.value = messageList
+    pendingRequest.value = pending
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '会话加载失败'
   } finally {
     loading.value = false
+  }
+}
+
+/**
+ * 判断一条消息是不是后端写入的「系统消息」（完成申请的发起/处理/撤回留痕）。
+ * 依据：这类消息没有真实发送者，sender_id 在数据库里是 NULL，经 mapMessage 后为 null。
+ */
+function isSystem(message: Message): boolean {
+  return message.senderId === null
+}
+
+/**
+ * 完成申请状态发生变化后，把消息列表与会话详情重新拉一遍。
+ *
+ * 单独抽出来的原因：这两次请求只是「让界面跟上后端」，属于收尾动作。
+ * 它们失败时不能覆盖上面那个接口操作给出的成功提示，所以这里主动吞掉异常
+ * （最坏情况是界面略旧，用户刷新页面即可）。
+ */
+async function refreshConversation() {
+  try {
+    const [detail, messageList] = await Promise.all([getConversationDetail(conversationId), getMessages(conversationId)])
+    conversation.value = detail
+    messages.value = messageList
+  } catch {
+    // 故意静默：刷新失败不影响已经成功的申请操作。
   }
 }
 
@@ -94,15 +132,19 @@ async function submit() {
  * 发起“完成寻找申请”。
  * 触发方式：点击“申请完成寻找”按钮。
  * 语义：认领沟通达成后，由一方发起完成申请，交给对方确认（见下方 reviewFinish）。
- * 成功后提示“等待对方确认”；失败（如后端判定无权发起、已有待处理申请）写入 finishMessage。
+ * 成功后把后端返回的申请写进 pendingRequest，界面立刻变成「等待对方处理」；
+ * 失败（如后端判定无权发起、已有待处理申请）写入 finishMessage。
  */
 async function requestFinish() {
   if (finishLoading.value) return
   finishLoading.value = true
   finishMessage.value = ''
   try {
-    await createFinishRequest(conversationId)
+    // 直接用返回值更新待办状态，省掉一次「再查一遍待办」的请求。
+    pendingRequest.value = await createFinishRequest(conversationId)
     finishMessage.value = '已发起完成寻找申请，等待对方确认。'
+    // 后端会同时写一条系统消息留痕，所以要把消息列表拉一遍才能看到。
+    await refreshConversation()
   } catch (error) {
     finishMessage.value = error instanceof Error ? error.message : '无法发起完成申请'
   } finally {
@@ -111,19 +153,26 @@ async function requestFinish() {
 }
 
 /**
- * 处理（同意 / 拒绝）一条待办的完成申请。
- * 触发方式：点击“同意完成申请”或“拒绝完成申请”按钮，status 分别为 'agreed' / 'rejected'。
- * 用 window.prompt 让用户填申请编号，并用正则 /^\d+$/ 校验必须是纯数字，否则直接返回。
- * 成功后按 status 给出不同提示（同意会让帖子被标记为完成）；失败写入 finishMessage。
- * 说明：谁能发起、谁能审批由后端按会话双方与申请状态判定，前端这里只负责提交操作与展示结果。
+ * 处理（同意 / 拒绝）当前待办的完成申请。
+ * 触发方式：点击“同意”或“拒绝”按钮，status 分别为 'agreed' / 'rejected'。
+ *
+ * 申请编号取自 pendingRequest（进页面时查出来的），不再让用户手输——
+ * 编号在界面上根本没有展示的地方，手输等于这个操作不可用。
+ * 成功后清空 pendingRequest 让状态条消失；同意时帖子会被标记完成，
+ * 因此额外刷新会话详情，让「已完成」标签与「申请完成寻找」入口同步变化。
+ * 说明：谁能发起、谁能审批由后端按会话双方与申请状态判定，前端只负责提交与展示结果。
  */
 async function reviewFinish(status: 'agreed' | 'rejected') {
-  const requestId = window.prompt('请输入待处理的完成申请编号')
-  if (!requestId || !/^\d+$/.test(requestId)) return
+  // 没有待办申请就无从处理（正常渲染下按钮此时也不会出现，这里再兜一层防误触）。
+  if (!pendingRequest.value || finishLoading.value) return
   finishLoading.value = true
+  finishMessage.value = ''
   try {
-    await reviewFinishRequest(conversationId, Number(requestId), status)
+    await reviewFinishRequest(conversationId, pendingRequest.value.id, status)
     finishMessage.value = status === 'agreed' ? '已同意，帖子已标记为完成。' : '已拒绝完成申请。'
+    // 这条申请已被处理，不再是「待处理」，清空本地状态让状态条消失。
+    pendingRequest.value = null
+    await refreshConversation()
   } catch (error) {
     finishMessage.value = error instanceof Error ? error.message : '处理完成申请失败'
   } finally {
@@ -133,19 +182,19 @@ async function reviewFinish(status: 'agreed' | 'rejected') {
 
 /**
  * 撤回自己发起的“完成寻找申请”。
- * 触发方式：点击“撤回完成申请”按钮。
- * 用 window.prompt 让用户填申请编号（与上面的 reviewFinish 保持一致的交互方式），
- * 并用正则 /^\d+$/ 校验必须是纯数字，否则直接返回。
+ * 触发方式：状态条上的“撤回申请”按钮（只在待办申请由本人发起时才渲染）。
  * 语义：只有发起方本人、且申请仍是待处理状态才能撤回；撤回后帖子不受影响。
- * 成功后提示已撤回；失败（非发起方 / 申请已被处理）写入 finishMessage。
+ * 成功后清空待办状态；失败（非发起方 / 申请已被处理）写入 finishMessage。
  */
 async function withdrawFinish() {
-  const requestId = window.prompt('请输入要撤回的完成申请编号')
-  if (!requestId || !/^\d+$/.test(requestId)) return
+  if (!pendingRequest.value || finishLoading.value) return
   finishLoading.value = true
+  finishMessage.value = ''
   try {
-    await withdrawFinishRequest(conversationId, Number(requestId))
+    await withdrawFinishRequest(conversationId, pendingRequest.value.id)
     finishMessage.value = '已撤回该完成寻找申请。'
+    pendingRequest.value = null
+    await refreshConversation()
   } catch (error) {
     finishMessage.value = error instanceof Error ? error.message : '撤回完成申请失败'
   } finally {
@@ -171,26 +220,42 @@ onMounted(loadConversation)
       <span v-if="conversation.postIsFinished" class="status-pill">已完成</span>
     </p>
     <div class="panel conversation-panel">
+      <!-- 完成寻找状态条（进页面就查了一次待办申请，所以三种状态无需用户手动触发即能正确显示）：
+           1) 有待办且是我发起的 → 只能等对方处理，可撤回；
+           2) 有待办且是对方发起的 → 我来同意或拒绝；
+           3) 无待办且帖子已完成 → 仅展示完成提示。 -->
+      <div v-if="pendingRequest" class="finish-banner">
+        <template v-if="pendingRequest.requesterId === user?.id">
+          <span>你已发起完成寻找申请，等待对方处理…</span>
+          <button class="text-button" :disabled="finishLoading" @click="withdrawFinish">撤回申请</button>
+        </template>
+        <template v-else>
+          <span>对方申请完成寻找，是否同意？同意后该帖子将被标记为已完成。</span>
+          <span class="finish-banner-actions">
+            <button class="primary-button" :disabled="finishLoading" @click="reviewFinish('agreed')">同意</button>
+            <button class="secondary-button" :disabled="finishLoading" @click="reviewFinish('rejected')">拒绝</button>
+          </span>
+        </template>
+      </div>
+      <p v-else-if="conversation?.postIsFinished" class="finish-done">该帖子已完成寻找</p>
       <!-- 三态渲染：加载中 → 无消息空态 → 消息列表（v-else 里用 v-for 遍历，:key=message.id） -->
       <div v-if="loading" class="empty-state">正在加载消息...</div>
       <div v-else-if="!messages.length" class="empty-state">还没有消息，先介绍一下物品特征吧。</div>
       <div v-else class="message-list">
-        <div v-for="message in messages" :key="message.id" class="message-row" :class="{ mine: message.senderId === user?.id }">
-          <div class="message-bubble"><p>{{ message.content }}</p><time>{{ new Date(message.createdAt).toLocaleString() }}</time></div>
+        <!-- 三种行样式：mine（我发的，靠右高亮）/ system（后端系统消息，居中灰条）/ 其余为对方。 -->
+        <div v-for="message in messages" :key="message.id" class="message-row" :class="{ mine: message.senderId === user?.id, system: isSystem(message) }">
+          <!-- 系统消息没有发送者（senderId 为 null），不套聊天气泡、也不显示时间，用居中灰条表达「这是流程留痕」 -->
+          <p v-if="isSystem(message)" class="message-system">{{ message.content }}</p>
+          <div v-else class="message-bubble"><p>{{ message.content }}</p><time>{{ new Date(message.createdAt).toLocaleString() }}</time></div>
         </div>
       </div>
-      <!-- :class="{ mine: ... }" 给“我发出的消息”加高亮样式；errorMessage / finishMessage 分别提示错误与结果 -->
+      <!-- errorMessage / finishMessage 分别提示错误与结果 -->
       <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
       <p v-if="finishMessage" class="success-message">{{ finishMessage }}</p>
-      <!-- 完成寻找操作区：申请由一方发起，另一方点同意/拒绝处理，发起方本人可撤回；
-           所有按钮在请求中用 finishLoading 禁用，避免并发操作。 -->
-      <div class="conversation-actions">
-        <!-- 帖子已完成时不再显示「申请完成寻找」：这正是会话详情接口回填 postIsFinished 的用途，
-             避免对一个已经完成的帖子反复发起申请。 -->
-        <button v-if="!conversation?.postIsFinished" class="secondary-button" :disabled="finishLoading" @click="requestFinish">申请完成寻找</button>
-        <button class="secondary-button" :disabled="finishLoading" @click="reviewFinish('agreed')">同意完成申请</button>
-        <button class="text-button" :disabled="finishLoading" @click="reviewFinish('rejected')">拒绝完成申请</button>
-        <button class="text-button" :disabled="finishLoading" @click="withdrawFinish">撤回完成申请</button>
+      <!-- 发起入口：已有待办申请或帖子已完成时都不再显示，避免发出必然被后端拒绝的重复申请。
+           同意/拒绝/撤回按钮已经移到上面的状态条里，只在真正有待办时出现。 -->
+      <div v-if="!pendingRequest && !conversation?.postIsFinished" class="conversation-actions">
+        <button class="secondary-button" :disabled="finishLoading" @click="requestFinish">申请完成寻找</button>
       </div>
       <!-- 发送消息表单：@submit.prevent 阻止浏览器默认刷新并调用 submit；textarea 用 v-model 双向绑定 content -->
       <form class="message-form" @submit.prevent="submit">

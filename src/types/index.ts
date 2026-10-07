@@ -178,10 +178,19 @@ export interface ItemForm {
  * 地点（如某教学楼、食堂），用于发布时选择位置及地图展示。
  */
 export interface Location {
-  // 地点 id（后端用字符串）
+  // 地点 id（后端用字符串，如 'pf-library'）
   id: string
   // 地点名称
   name: string
+  // 所属校区（如「屏峰校区」）
+  // GET /geo/locations 把地点按校区分组时，campus 在分组上；但 /geo/locate 单独返回一个地点时，
+  // campus 只挂在地点自己身上 —— 所以这个字段必须冗余存在，否则定位结果里拿不到校区。
+  campus: string
+  // 地点分类（如「图书馆」「食堂」）
+  // 用途：不同校区存在同名地点时，靠分类在下拉框里区分。
+  category: string
+  // 更细的地址描述（如「屏峰·中心区」），比各级 name 更能说明具体位置
+  address: string
   // 纬度
   latitude: number
   // 经度

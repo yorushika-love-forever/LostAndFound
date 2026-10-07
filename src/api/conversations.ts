@@ -5,7 +5,8 @@
  * 依赖：./http 的 request()/requestAllPages()。
  * 后端路由挂在 /conversations 与 /posts/:id/conversations 下。
  * 对外导出：Message 类型及 getConversations、getConversationDetail、getMessages、sendMessage、
- * createFinishRequest、reviewFinishRequest、withdrawFinishRequest、createClaim、getMyClaims。
+ * createFinishRequest、getPendingFinishRequest、reviewFinishRequest、withdrawFinishRequest、
+ * createClaim、getMyClaims。
  */
 import { request, requestAllPages } from './http'
 import type { ClaimApplication, Conversation, FinishRequest, LostItem } from '@/types'
@@ -31,7 +32,10 @@ interface BackendConversation {
 export interface Message {
   id: number
   conversationId: number
-  senderId: number
+  // 发送方用户 id。为 null 表示「系统消息」——后端在完成寻找申请被发起/同意/拒绝/撤回时
+  // 会往会话里写一条留痕，这类消息没有真实发送者。界面据此把它们渲染成居中的灰色提示条，
+  // 而不是塞进某一侧的聊天气泡里（否则看起来像是「用户 0」发了一句莫名其妙的话）。
+  senderId: number | null
   content: string
   createdAt: string
 }
@@ -40,7 +44,8 @@ export interface Message {
 interface BackendMessage {
   id: number | string
   conversation_id: number | string
-  sender_id: number | string
+  // 系统消息的 sender_id 在数据库里是 NULL，序列化成 JSON 即 null，故类型必须带上 null。
+  sender_id: number | string | null
   content: string
   created_at: string
 }
@@ -85,7 +90,10 @@ function mapMessage(message: BackendMessage): Message {
   return {
     id: Number(message.id),
     conversationId: Number(message.conversation_id),
-    senderId: Number(message.sender_id),
+    // 系统消息必须原样保留 null：早前直接写 Number(message.sender_id)，
+    // 而 Number(null) === 0，于是系统消息被当成「用户 0 发出的普通消息」渲染在左侧气泡里。
+    // 这里先判空再转换，null / undefined 一律映射为 null，交给界面按系统消息处理。
+    senderId: message.sender_id === null || message.sender_id === undefined ? null : Number(message.sender_id),
     content: message.content,
     createdAt: message.created_at,
   }
@@ -168,6 +176,25 @@ export async function sendMessage(conversationId: number, content: string): Prom
  */
 export async function createFinishRequest(conversationId: number): Promise<FinishRequest> {
   return mapFinishRequest(await request<BackendFinishRequest>(`/conversations/${conversationId}/finish-requests`, { method: 'POST' }))
+}
+
+/**
+ * 查询会话当前「待处理」的完成寻找申请：GET /api/v1/conversations/:conversationId/finish-requests
+ *
+ * 为什么必须单独查一次：申请编号（id）只存在于接口返回里，界面上没有任何地方会展示它。
+ * 早前页面靠 window.prompt 让用户手输编号，等于这三个操作（同意/拒绝/撤回）根本没法用；
+ * 改为进页面就查一次，按钮直接带着查到的 id 调接口。
+ *
+ * 后端保证同一会话同一时刻最多只有一条 pending 申请，没有时 data 为 null。
+ * @param conversationId 会话 ID
+ * @returns 待处理的 FinishRequest；没有待处理申请时为 null
+ * @throws 非参与方或接口失败时抛 Error(后端 msg)
+ */
+export async function getPendingFinishRequest(conversationId: number): Promise<FinishRequest | null> {
+  // 后端该字段是 *FinishRequest（Go 指针），没有待办申请时序列化成 JSON null。
+  // 因此泛型要写成可空，且必须先判空再映射，否则 mapFinishRequest(null) 会读 null.id 直接抛错。
+  const data = await request<BackendFinishRequest | null>(`/conversations/${conversationId}/finish-requests`)
+  return data ? mapFinishRequest(data) : null
 }
 
 /**
