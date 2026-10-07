@@ -21,11 +21,9 @@ const menus: MenuItem[] = [
   { path: '/admin/items', text: '物品状态' },
   { path: '/admin/comments', text: '评论管理' },
   { path: '/admin/deleted-posts', text: '已删除帖子' },
-  { path: '/admin/claims', text: '认领处理' },
   {
     path: '/admin/announcements',
     text: '公告管理',
-    roles: ['mainadmin'],
   },
   {
     path: '/admin/users',
@@ -35,6 +33,11 @@ const menus: MenuItem[] = [
   {
     path: '/admin/feedbacks',
     text: '意见反馈',
+    roles: ['mainadmin'],
+  },
+  {
+    path: '/admin/appeals',
+    text: '申诉审核',
     roles: ['mainadmin'],
   },
 ]

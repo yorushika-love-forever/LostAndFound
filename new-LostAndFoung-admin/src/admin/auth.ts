@@ -28,20 +28,24 @@ export async function adminLogin(username: string, password: string) {
     throw new Error('登录成功，但后端没有返回 Token')
   }
 
-  if (result.user.role !== 'postadmin' && result.user.role !== 'mainadmin') {
+  const user = result.user
+
+  if (user.role !== 'postadmin' && user.role !== 'mainadmin') {
     throw new Error('当前账号没有管理端权限')
   }
 
   localStorage.setItem(TOKEN_KEY, token)
-  localStorage.setItem(USER_KEY, JSON.stringify(result.user))
+  localStorage.setItem(USER_KEY, JSON.stringify(user))
 
-  return result.user
+  return user
 }
 
 export async function refreshAdminUser() {
   const result = await getProfileApi()
-  localStorage.setItem(USER_KEY, JSON.stringify(result.user))
-  return result.user
+  const user = result.user
+
+  localStorage.setItem(USER_KEY, JSON.stringify(user))
+  return user
 }
 
 export function adminLogout() {

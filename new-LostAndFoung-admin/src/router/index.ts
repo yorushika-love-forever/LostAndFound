@@ -53,13 +53,8 @@ const router = createRouter({
           component: () => import('@/admin/DeletedPostView.vue'),
         },
         {
-          path: 'claims',
-          component: () => import('@/admin/ClaimManageView.vue'),
-        },
-        {
           path: 'announcements',
           component: () => import('@/admin/AnnouncementManageView.vue'),
-          meta: { roles: ['mainadmin'] },
         },
         {
           path: 'users',
@@ -69,6 +64,11 @@ const router = createRouter({
         {
           path: 'feedbacks',
           component: () => import('@/admin/FeedbackManageView.vue'),
+          meta: { roles: ['mainadmin'] },
+        },
+        {
+          path: 'appeals',
+          component: () => import('@/admin/AppealManageView.vue'),
           meta: { roles: ['mainadmin'] },
         },
         {
