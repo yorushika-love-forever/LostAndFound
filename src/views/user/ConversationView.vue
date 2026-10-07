@@ -5,8 +5,9 @@
  * 并提供“完成寻找申请”的发起与同意/拒绝操作。
  *
  * 依赖接口：getMessages(会话id) 取历史消息、sendMessage(会话id, 文本) 发消息、
- *          createFinishRequest 发起完成申请、reviewFinishRequest 处理（同意/拒绝）申请。
- * 主要交互：进入即拉取消息；填写消息并提交；发起/审批完成申请。
+ *          createFinishRequest 发起完成申请、reviewFinishRequest 处理（同意/拒绝）申请、
+ *          withdrawFinishRequest 撤回自己发起的完成申请。
+ * 主要交互：进入即拉取消息；填写消息并提交；发起/审批/撤回完成申请。
  */
 <script setup lang="ts">
 // ref 创建响应式状态；onMounted 注册“组件挂载后”的回调（这里用来加载消息）。
@@ -14,7 +15,7 @@ import { onMounted, ref } from 'vue'
 // 只用到 useRoute 读取路由参数 :id，本页没有编程式跳转需求。
 import { useRoute } from 'vue-router'
 // 会话接口与 Message 类型；注意 Message 是 type-only 导入，编译后会被擦除。
-import { createFinishRequest, getMessages, reviewFinishRequest, sendMessage, type Message } from '@/api/conversations'
+import { createFinishRequest, getMessages, reviewFinishRequest, sendMessage, withdrawFinishRequest, type Message } from '@/api/conversations'
 // 全局登录态：user 用来判断每条消息是不是“我”发出的。
 import { useAuth } from '@/stores/auth'
 
@@ -120,6 +121,28 @@ async function reviewFinish(status: 'agreed' | 'rejected') {
   }
 }
 
+/**
+ * 撤回自己发起的“完成寻找申请”。
+ * 触发方式：点击“撤回完成申请”按钮。
+ * 用 window.prompt 让用户填申请编号（与上面的 reviewFinish 保持一致的交互方式），
+ * 并用正则 /^\d+$/ 校验必须是纯数字，否则直接返回。
+ * 语义：只有发起方本人、且申请仍是待处理状态才能撤回；撤回后帖子不受影响。
+ * 成功后提示已撤回；失败（非发起方 / 申请已被处理）写入 finishMessage。
+ */
+async function withdrawFinish() {
+  const requestId = window.prompt('请输入要撤回的完成申请编号')
+  if (!requestId || !/^\d+$/.test(requestId)) return
+  finishLoading.value = true
+  try {
+    await withdrawFinishRequest(conversationId, Number(requestId))
+    finishMessage.value = '已撤回该完成寻找申请。'
+  } catch (error) {
+    finishMessage.value = error instanceof Error ? error.message : '撤回完成申请失败'
+  } finally {
+    finishLoading.value = false
+  }
+}
+
 // 挂载后立即加载消息（loading 初值为 true，会先显示“正在加载消息...”）。
 onMounted(loadMessages)
 </script>
@@ -140,11 +163,13 @@ onMounted(loadMessages)
       <!-- :class="{ mine: ... }" 给“我发出的消息”加高亮样式；errorMessage / finishMessage 分别提示错误与结果 -->
       <p v-if="errorMessage" class="error-message">{{ errorMessage }}</p>
       <p v-if="finishMessage" class="success-message">{{ finishMessage }}</p>
-      <!-- 完成寻找操作区：申请由一方发起，另一方点同意/拒绝处理；按钮在请求中用 finishLoading 禁用 -->
+      <!-- 完成寻找操作区：申请由一方发起，另一方点同意/拒绝处理，发起方本人可撤回；
+           所有按钮在请求中用 finishLoading 禁用，避免并发操作。 -->
       <div class="conversation-actions">
         <button class="secondary-button" :disabled="finishLoading" @click="requestFinish">申请完成寻找</button>
         <button class="secondary-button" :disabled="finishLoading" @click="reviewFinish('agreed')">同意完成申请</button>
         <button class="text-button" :disabled="finishLoading" @click="reviewFinish('rejected')">拒绝完成申请</button>
+        <button class="text-button" :disabled="finishLoading" @click="withdrawFinish">撤回完成申请</button>
       </div>
       <!-- 发送消息表单：@submit.prevent 阻止浏览器默认刷新并调用 submit；textarea 用 v-model 双向绑定 content -->
       <form class="message-form" @submit.prevent="submit">

@@ -5,7 +5,7 @@
  * 依赖：./http 的 request()/requestAllPages()，以及 ./posts 的 getItem()（用于补全会话的帖子标题）。
  * 后端路由挂在 /conversations 与 /posts/:id/conversations 下。
  * 对外导出：Message 类型及 getConversations、getMessages、sendMessage、
- * createFinishRequest、reviewFinishRequest、createClaim、getMyClaims。
+ * createFinishRequest、reviewFinishRequest、withdrawFinishRequest、createClaim、getMyClaims。
  */
 import { request, requestAllPages } from './http'
 import { getItem } from './posts'
@@ -159,6 +159,20 @@ export async function reviewFinishRequest(conversationId: number, requestId: num
     method: 'PATCH',
     body: JSON.stringify({ status }),
   }))
+}
+
+/**
+ * 撤回「完结申请」：DELETE /api/v1/conversations/:conversationId/finish-requests/:requestId
+ *
+ * 语义：仅「申请发起方本人」可撤回，且只对仍处于 pending 的申请有效；
+ * 撤回只是把该申请软删除并留一条系统消息，帖子本身不受影响。
+ * @param conversationId 会话 ID
+ * @param requestId 完结申请 ID
+ * @throws 非发起方、申请已被同意/拒绝或接口失败时抛 Error(后端 msg)
+ */
+export async function withdrawFinishRequest(conversationId: number, requestId: number): Promise<void> {
+  // 后端成功时返回 data 为 null，这里不需要返回值，故声明为 Promise<void>。
+  await request(`/conversations/${conversationId}/finish-requests/${requestId}`, { method: 'DELETE' })
 }
 
 /**
