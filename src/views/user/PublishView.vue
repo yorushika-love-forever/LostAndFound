@@ -1,15 +1,16 @@
 <!--
   发布信息页（路由：`/publish`，需要登录，见 router/index.ts）。
   作用：填写物品类型 / 名称 / 地点 / 描述并上传图片，提交后交由管理员审核。
-  读取接口：getLocations()（`GET /geo/locations`，用于地点分组下拉）。
+  读取接口：getLocations()（`GET /geo/locations`，用于地点分组下拉）、
+           locateNearest()（`POST /geo/locate`，把浏览器定位坐标交给后端匹配最近地点）。
   提交接口：createItem(form)（`POST /posts`，以 multipart/form-data 上传图片）。
-  主要交互：选择图片时本地校验并预览、提交前表单校验、成功后延时跳转到「我的记录」。
+  主要交互：一键定位最近地点、选择图片时本地校验并预览、提交前表单校验、成功后延时跳转到「我的记录」。
 -->
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { createItem } from '@/api/posts'
-import { getLocations } from '@/api/geo'
+import { getLocations, locateNearest } from '@/api/geo'
 import type { ItemForm, LocationGroup } from '@/types'
 
 const router = useRouter()
@@ -22,6 +23,10 @@ const errorMessage = ref('')
 const locations = ref<LocationGroup[]>([])
 // imagePreview 存本地预览用的 blob URL（并非后端地址），仅在提交前展示。
 const imagePreview = ref('')
+// 定位请求进行中标记：用于禁用「一键定位」按钮，避免连点重复请求。
+const locating = ref(false)
+// 定位成功后的提示（如「已定位到最近地点：图书馆（约 120 米）」）。
+const locateMessage = ref('')
 // reactive 收集整张表单；字段名与 ItemForm 对齐，type 默认 'lost'（我丢失了物品）。
 const form = reactive<ItemForm>({ title: '', type: 'lost', description: '', locationId: '', supplement: '', image: null })
 
@@ -38,6 +43,45 @@ onMounted(async () => {
     errorMessage.value = error instanceof Error ? error.message : '地点加载失败'
   }
 })
+
+/**
+ * 一键定位最近地点：浏览器取 GPS 坐标 → 后端匹配最近的校园预设地点 → 自动填入下拉框。
+ * 触发时机：点击地点下拉框下方的「一键定位最近地点」按钮（type="button"，不会触发表单提交）。
+ * 调用接口：locateNearest(lat, lng)（`POST /geo/locate`）。
+ * 成功：把返回的地点 id 写进 form.locationId（下拉框会自动选中它），并显示「地点 + 距离」提示。
+ * 失败：写入 errorMessage。
+ *
+ * 注意：出于安全考虑，浏览器只在「安全上下文」（HTTPS 或 localhost）才允许定位。
+ * 用 http://IP 访问时 getCurrentPosition 会直接失败，此时提示用户改用手动选择。
+ */
+async function locateNearestLocation() {
+  if (locating.value) return
+  locateMessage.value = ''
+  errorMessage.value = ''
+  // 先判断浏览器是否具备定位能力，避免在不支持的浏览器上抛异常。
+  if (!navigator.geolocation) {
+    errorMessage.value = '当前浏览器不支持定位，请手动选择地点'
+    return
+  }
+  locating.value = true
+  try {
+    // getCurrentPosition 是回调式 API，用 Promise 包一层才能配合 async/await 使用。
+    const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 })
+    })
+    const result = await locateNearest(position.coords.latitude, position.coords.longitude)
+    // 只写 locationId：下拉框的选项由 getLocations 渲染，匹配到的 id 一定在其中，选中即可。
+    form.locationId = result.location.id
+    // 距离是浮点数（米），取整后展示更自然。
+    locateMessage.value = `已定位到最近地点：${result.location.name}（约 ${Math.round(result.distanceMeters)} 米）`
+  } catch (error) {
+    // 定位失败时浏览器抛的是 GeolocationPositionError（不是 Error 实例），
+    // 因此这里给一句兼顾「未授权 / 非 HTTPS / 超时」的通用提示。
+    errorMessage.value = error instanceof Error ? error.message : '定位失败（需在 HTTPS 或 localhost 下且授权定位），请手动选择地点'
+  } finally {
+    locating.value = false
+  }
+}
 
 /**
  * 处理图片选择（input type=file 的 @change）。
@@ -114,6 +158,12 @@ async function submit() {
           </optgroup>
         </select>
       </label>
+      <!-- 一键定位：用浏览器定位坐标请后端匹配最近的预设地点，省去手动翻找下拉框。
+           必须是 type="button"，否则在 form 内会被当成提交按钮触发表单提交。 -->
+      <div class="locate-row">
+        <button class="secondary-button" type="button" :disabled="locating" @click="locateNearestLocation">{{ locating ? '定位中...' : '一键定位最近地点' }}</button>
+        <span v-if="locateMessage" class="muted">{{ locateMessage }}</span>
+      </div>
       <label>地点补充<textarea v-model="form.supplement" maxlength="200" placeholder="例如：东门台阶旁"></textarea></label>
       <label>详细描述<textarea v-model="form.description" required maxlength="2000" placeholder="描述颜色、品牌、特殊标记等关键信息"></textarea></label>
       <!-- accept="image/*" 只用于过滤文件选择器；真正的类型/大小校验在 chooseImage 里 -->
