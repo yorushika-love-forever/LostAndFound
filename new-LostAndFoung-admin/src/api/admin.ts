@@ -127,8 +127,21 @@ export function createAnnouncementApi(payload: {
   title: string
   content: string
   status: AnnouncementStatus
-}) {
-  return request.post(adminEndpoints.adminAnnouncements, payload)
+}, image?: File | null) {
+  // 没有手绘图时继续使用原来的 JSON 请求。
+  if (!image) {
+    return request.post(adminEndpoints.adminAnnouncements, payload)
+  }
+
+  // 有手绘图时改发 multipart/form-data。
+  // 浏览器会自动生成 Content-Type 的 boundary。
+  const body = new FormData()
+  body.append('title', payload.title)
+  body.append('content', payload.content)
+  body.append('status', payload.status)
+  body.append('image', image)
+
+  return request.post(adminEndpoints.adminAnnouncements, body)
 }
 
 export function updateAnnouncementApi(

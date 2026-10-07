@@ -19,6 +19,9 @@ export const backendSupport = {
   // DELETE /api/v1/admin/announcements/:id
   adminAnnouncements: false,
 
+  // 公告创建和编辑接口是否支持 multipart/form-data 的可选 image 文件。
+  announcementImages: false,
+
   // GET /api/v1/admin/stats
   statistics: false,
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import {
   createAnnouncementApi,
   deleteAnnouncementApi,
@@ -8,6 +8,7 @@ import {
   updateAnnouncementStatusApi,
 } from '@/api/admin'
 import { backendSupport } from '@/admin/config'
+import DrawingCanvas from '@/admin/DrawingCanvas.vue'
 import {
   announcementStatusText,
   formatDate,
@@ -22,6 +23,9 @@ const form = reactive({
   content: '',
   status: 'published' as 'draft' | 'published',
 })
+const showDrawing = ref(false)
+const drawingFile = ref<File | null>(null)
+const drawingPreview = ref('')
 
 async function loadAnnouncements() {
   loading.value = true
@@ -47,15 +51,23 @@ async function createAnnouncement() {
     return
   }
 
+  if (drawingFile.value && !backendSupport.announcementImages) {
+    errorMessage.value = '后端公告接口暂时不支持图片'
+    return
+  }
+
   try {
     await createAnnouncementApi({
       title: form.title,
       content: form.content,
       status: form.status,
-    })
+    }, drawingFile.value)
 
     form.title = ''
     form.content = ''
+    drawingFile.value = null
+    clearDrawingPreview()
+    showDrawing.value = false
     await loadAnnouncements()
   } catch (error) {
     window.alert(error instanceof Error ? error.message : '创建失败')
@@ -103,11 +115,35 @@ async function remove(announcement: AdminAnnouncement) {
   }
 }
 
+function changeDrawing(file: File | null) {
+  drawingFile.value = file
+  clearDrawingPreview()
+
+  if (file) {
+    drawingPreview.value = URL.createObjectURL(file)
+  }
+}
+
+function clearDrawingPreview() {
+  if (drawingPreview.value) {
+    URL.revokeObjectURL(drawingPreview.value)
+    drawingPreview.value = ''
+  }
+}
+
+function removeDrawing() {
+  drawingFile.value = null
+  clearDrawingPreview()
+  showDrawing.value = false
+}
+
 onMounted(() => {
   if (backendSupport.adminAnnouncements) {
     void loadAnnouncements()
   }
 })
+
+onBeforeUnmount(clearDrawingPreview)
 </script>
 
 <template>
@@ -155,6 +191,33 @@ onMounted(() => {
             <option value="published">立即发布</option>
             <option value="draft">保存草稿</option>
           </select>
+        </div>
+
+        <div class="form-item">
+          <label>手绘图片（可选）</label>
+          <button
+            class="button"
+            type="button"
+            @click="showDrawing = !showDrawing"
+          >
+            {{ showDrawing ? '收起画板' : '添加手绘' }}
+          </button>
+
+          <DrawingCanvas
+            v-if="showDrawing"
+            @change="changeDrawing"
+          />
+
+          <div v-if="drawingPreview" class="drawing-preview">
+            <img :src="drawingPreview" alt="公告手绘预览" />
+            <button
+              class="button small danger"
+              type="button"
+              @click="removeDrawing"
+            >
+              删除手绘
+            </button>
+          </div>
         </div>
 
         <button
@@ -230,5 +293,21 @@ onMounted(() => {
 .panel-title {
   margin: 0 0 14px;
   color: #0f172a;
+}
+
+.drawing-preview {
+  margin-top: 12px;
+}
+
+.drawing-preview img {
+  display: block;
+  width: 100%;
+  max-width: 600px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.drawing-preview .button {
+  margin-top: 8px;
 }
 </style>
