@@ -2,6 +2,8 @@ import { request } from '@/api/http'
 import type {
   AdminAnnouncement,
   AdminClaim,
+  AdminComment,
+  AdminFeedback,
   AdminPost,
   AdminUser,
   AnnouncementStatus,
@@ -18,6 +20,13 @@ export const adminEndpoints = {
   posts: '/posts',
   reviewPost: (id: number | string) => `/posts/${id}/review`,
   postStatus: (id: number | string) => `/admin/posts/${id}/status`,
+  deletedPosts: '/admin/posts/deleted',
+  recoverPost: (id: number | string) => `/posts/${id}/recover`,
+
+  comments: (postId: number | string) => `/posts/${postId}/comments`,
+  comment: (id: number | string) => `/comments/${id}`,
+
+  feedbacks: '/admin/feedbacks',
 
   claims: '/admin/claims',
   reviewClaim: (id: number | string) => `/admin/claims/${id}/review`,
@@ -75,7 +84,9 @@ export function getPostsApi(params: {
   if (params.type) query.type = params.type
   if (params.status) query.status = params.status
 
-  return request.get<PageResult<AdminPost>>(adminEndpoints.posts, {params: query,})
+  return request.get<PageResult<AdminPost>>(adminEndpoints.posts, {
+    params: query,
+  })
 }
 
 export function reviewPostApi(
@@ -92,6 +103,44 @@ export function updatePostStatusApi(
   return request.patch(adminEndpoints.postStatus(id), { status })
 }
 
+export function getDeletedPostsApi(params: {
+  page: number
+  page_size: number
+}) {
+  return request.get<PageResult<AdminPost>>(adminEndpoints.deletedPosts, {
+    params,
+  })
+}
+
+export function recoverPostApi(id: number | string) {
+  return request.patch(adminEndpoints.recoverPost(id))
+}
+
+export function getPostCommentsApi(postId: number | string) {
+  return request.get<PageResult<AdminComment>>(
+    adminEndpoints.comments(postId),
+    {
+      params: {
+        page: 1,
+        page_size: 100,
+      },
+    },
+  )
+}
+
+export function deleteCommentApi(id: number | string) {
+  return request.delete(adminEndpoints.comment(id))
+}
+
+export function getFeedbacksApi(params: {
+  page: number
+  page_size: number
+}) {
+  return request.get<PageResult<AdminFeedback>>(adminEndpoints.feedbacks, {
+    params,
+  })
+}
+
 export function getClaimsApi(params: {
   page: number
   page_size: number
@@ -103,7 +152,9 @@ export function getClaimsApi(params: {
   }
 
   if (params.status) query.status = params.status
-  return request.get<PageResult<AdminClaim>>(adminEndpoints.claims, {params: query,})
+  return request.get<PageResult<AdminClaim>>(adminEndpoints.claims, {
+    params: query,
+  })
 }
 
 export function reviewClaimApi(

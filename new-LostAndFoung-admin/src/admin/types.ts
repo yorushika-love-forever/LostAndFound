@@ -32,6 +32,25 @@ export interface AdminPost {
   deleted_at?: string | null
 }
 
+export interface AdminComment {
+  id: number | string
+  post_id: number | string
+  user_id: number | string
+  author_name?: string
+  content: string
+  created_at: string
+}
+
+export interface AdminFeedback {
+  id: number | string
+  user_id: number | string
+  author_name?: string
+  content: string
+  status: string
+  created_at: string
+  updated_at?: string
+}
+
 // 当前服务器还没有 /admin/claims，因此页面会先显示“后端未开放”。
 export type ClaimStatus = 'pending' | 'approved' | 'rejected'
 
