@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { getPostsApi, reviewPostApi } from '@/api/admin'
+import {
+  getPostsApi,
+  reviewPostApi,
+} from '@/api/admin'
 import { formatDate, postStatusText } from '@/admin/format'
 import type { AdminPost, ReviewStatus } from '@/admin/types'
 

@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { getPostsApi, updatePostStatusApi } from '@/api/admin'
+import {
+  getPostsApi,
+  updatePostFinishedApi,
+  updatePostStatusApi,
+} from '@/api/admin'
 import { formatDate, postStatusText } from '@/admin/format'
 import type { AdminPost, ReviewStatus } from '@/admin/types'
 
@@ -31,6 +35,17 @@ async function loadPosts() {
 async function changeStatus(post: AdminPost, nextStatus: ReviewStatus) {
   try {
     await updatePostStatusApi(post.id, nextStatus)
+    await loadPosts()
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : '操作失败')
+  }
+}
+
+async function changeFinished(post: AdminPost) {
+  const nextFinished = !post.is_finished
+
+  try {
+    await updatePostFinishedApi(post.id, nextFinished)
     await loadPosts()
   } catch (error) {
     window.alert(error instanceof Error ? error.message : '操作失败')
@@ -84,6 +99,14 @@ onMounted(loadPosts)
             <td>{{ postStatusText(post.status) }}</td>
             <td>{{ formatDate(post.updated_at) }}</td>
             <td>
+              <button
+                v-if="post.status === 'approved'"
+                class="button small primary"
+                type="button"
+                @click="changeFinished(post)"
+              >
+                {{ post.is_finished ? '设为未完成' : '设为已完成' }}
+              </button>
               <button
                 v-if="post.status !== 'approved'"
                 class="button small primary"
