@@ -1,0 +1,235 @@
+<script setup lang="ts">
+import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import {
+  createAnnouncementApi,
+  deleteAnnouncementApi,
+  getAnnouncementsApi,
+} from '@/api/admin'
+import { backendSupport } from '@/admin/config'
+import DrawingCanvas from '@/admin/DrawingCanvas.vue'
+import { formatDate } from '@/admin/format'
+import type { AdminAnnouncement } from '@/admin/types'
+
+const announcements = ref<AdminAnnouncement[]>([])
+const loading = ref(false)
+const errorMessage = ref('')
+const form = reactive({
+  title: '',
+  content: '',
+})
+const showDrawing = ref(false)
+const drawingFile = ref<File | null>(null)
+const drawingPreview = ref('')
+
+async function loadAnnouncements() {
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    const result = await getAnnouncementsApi({
+      page: 1,
+      page_size: 100,
+    })
+    announcements.value = result.list
+  } catch (error) {
+    errorMessage.value =
+      error instanceof Error ? error.message : '查询失败'
+  } finally {
+    loading.value = false
+  }
+}
+
+async function createAnnouncement() {
+  if (!form.title.trim() || !form.content.trim()) {
+    errorMessage.value = '请填写标题和内容'
+    return
+  }
+
+  if (drawingFile.value && !backendSupport.announcementImages) {
+    errorMessage.value = '后端公告接口暂时不支持图片'
+    return
+  }
+
+  try {
+    await createAnnouncementApi({
+      title: form.title,
+      content: form.content,
+    }, drawingFile.value)
+
+    form.title = ''
+    form.content = ''
+    drawingFile.value = null
+    clearDrawingPreview()
+    showDrawing.value = false
+    await loadAnnouncements()
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : '创建失败')
+  }
+}
+
+async function remove(announcement: AdminAnnouncement) {
+  if (!window.confirm(`确定删除“${announcement.title}”吗？`)) return
+
+  try {
+    await deleteAnnouncementApi(announcement.id)
+    await loadAnnouncements()
+  } catch (error) {
+    window.alert(error instanceof Error ? error.message : '删除失败')
+  }
+}
+
+function changeDrawing(file: File | null) {
+  drawingFile.value = file
+  clearDrawingPreview()
+
+  if (file) {
+    drawingPreview.value = URL.createObjectURL(file)
+  }
+}
+
+function clearDrawingPreview() {
+  if (drawingPreview.value) {
+    URL.revokeObjectURL(drawingPreview.value)
+    drawingPreview.value = ''
+  }
+}
+
+function removeDrawing() {
+  drawingFile.value = null
+  clearDrawingPreview()
+  showDrawing.value = false
+}
+
+onMounted(() => {
+  if (backendSupport.adminAnnouncements) {
+    void loadAnnouncements()
+  }
+})
+
+onBeforeUnmount(clearDrawingPreview)
+</script>
+
+<template>
+  <div>
+    <h2 class="page-title">公告管理</h2>
+
+    <div class="panel">
+        <h3 class="panel-title">发布公告</h3>
+
+        <div class="form-item">
+          <label>标题</label>
+          <input v-model="form.title" class="input" placeholder="请输入标题" />
+        </div>
+
+        <div class="form-item">
+          <label>内容</label>
+          <textarea
+            v-model="form.content"
+            class="textarea"
+            rows="4"
+            placeholder="请输入公告内容"
+          />
+        </div>
+
+        <div class="form-item">
+          <label>手绘图片（可选）</label>
+          <button
+            class="button"
+            type="button"
+            @click="showDrawing = !showDrawing"
+          >
+            {{ showDrawing ? '收起画板' : '添加手绘' }}
+          </button>
+
+          <DrawingCanvas
+            v-if="showDrawing"
+            @change="changeDrawing"
+          />
+
+          <div v-if="drawingPreview" class="drawing-preview">
+            <img :src="drawingPreview" alt="公告手绘预览" />
+            <button
+              class="button small danger"
+              type="button"
+              @click="removeDrawing"
+            >
+              删除手绘
+            </button>
+          </div>
+          <p
+            v-if="drawingFile && !backendSupport.announcementImages"
+            class="error-text"
+          >
+            当前后端公告接口暂不支持图片。
+          </p>
+        </div>
+
+        <button
+          class="button primary"
+          type="button"
+          @click="createAnnouncement"
+        >
+          提交
+        </button>
+    </div>
+
+    <div class="panel">
+        <h3 class="panel-title">公告列表</h3>
+
+        <p v-if="errorMessage" class="error-text">{{ errorMessage }}</p>
+        <p v-if="loading" class="empty-text">正在加载...</p>
+
+        <table v-else class="data-table">
+          <thead>
+            <tr>
+              <th>编号</th>
+              <th>标题</th>
+              <th>内容</th>
+              <th>发布时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in announcements" :key="item.id">
+              <td>{{ item.id }}</td>
+              <td>{{ item.title }}</td>
+              <td>{{ item.content }}</td>
+              <td>{{ formatDate(item.created_at) }}</td>
+              <td>
+                <button
+                  class="button small danger"
+                  type="button"
+                  @click="remove(item)"
+                >
+                  删除
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+  </div>
+</template>
+
+<style scoped>
+.panel-title {
+  margin: 0 0 14px;
+  color: #0f172a;
+}
+
+.drawing-preview {
+  margin-top: 12px;
+}
+
+.drawing-preview img {
+  display: block;
+  width: 100%;
+  max-width: 600px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.drawing-preview .button {
+  margin-top: 8px;
+}
+</style>
