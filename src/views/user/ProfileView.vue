@@ -1,12 +1,12 @@
 /**
  * ProfileView.vue —— 个人资料页（路由 /profile）
  *
- * 页面作用：展示并修改个人资料、修改登录密码、注销账号，共三个表单/区块。
+ * 页面作用：展示并修改个人资料、修改登录密码、提交意见反馈、注销账号，共四个表单/区块。
  *
- * 依赖接口：updateProfile 改资料、updatePassword 改密码、deactivateAccount 注销账号；
- *          通过 useAuth() 拿到当前用户 user 及 refreshUser / logout 方法。
+ * 依赖接口：updateProfile 改资料、updatePassword 改密码、submitFeedback 提交反馈、
+ *          deactivateAccount 注销账号；通过 useAuth() 拿到当前用户 user 及 refreshUser / logout 方法。
  * 主要交互：保存资料（成功后刷新全局用户）、修改密码（成功后清空输入框）、
- *          注销账号（二次确认后调用接口，成功则清空登录态并跳回登录页）。
+ *          提交反馈（成功后清空输入框并提示）、注销账号（二次确认后调用接口，成功则清空登录态并跳回登录页）。
  */
 <script setup lang="ts">
 // reactive 用于创建对象形式的响应式数据（适合配合表单 v-model 使用）；ref 用于单个值。
@@ -15,6 +15,8 @@ import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 // 账号相关接口：资料更新 / 密码修改 / 账号注销。
 import { deactivateAccount, updatePassword, updateProfile } from '@/api/auth'
+// 反馈接口：把用户填写的正文提交给后端（POST /feedbacks）。
+import { submitFeedback } from '@/api/feedbacks'
 // 全局登录态：user 当前用户；refreshUser 重新拉取用户信息；logout 清空登录态。
 import { useAuth } from '@/stores/auth'
 
@@ -25,13 +27,17 @@ const { user, refreshUser, logout } = useAuth()
 const profile = reactive({ name: user.value?.name || '', username: user.value?.studentNo || '' })
 // 密码表单：三个字段都由 v-model 双向绑定，提交后清空。
 const password = reactive({ oldPassword: '', newPassword: '', confirmPassword: '' })
-// 两个表单各自的成功提示，以及三个操作共用的错误提示。
+// 反馈表单：只有一个正文字段，同样由 v-model 绑定，提交成功后清空。
+const feedback = reactive({ content: '' })
+// 各表单各自的成功提示，以及所有操作共用的错误提示。
 const profileMessage = ref('')
 const passwordMessage = ref('')
+const feedbackMessage = ref('')
 const errorMessage = ref('')
-// 两个表单各自的提交中状态，用于禁用按钮并显示“保存中.../修改中...”。
+// 各表单各自的提交中状态，用于禁用按钮并显示“保存中.../修改中.../提交中...”。
 const profileLoading = ref(false)
 const passwordLoading = ref(false)
+const feedbackLoading = ref(false)
 
 /**
  * 保存个人资料。
@@ -58,6 +64,21 @@ async function savePassword() {
   try { await updatePassword(password); password.oldPassword = ''; password.newPassword = ''; password.confirmPassword = ''; passwordMessage.value = '密码修改成功，请牢记新密码' }
   catch (error) { errorMessage.value = error instanceof Error ? error.message : '密码修改失败' }
   finally { passwordLoading.value = false }
+}
+
+/**
+ * 提交意见反馈。
+ * 触发方式：提交“意见反馈”表单（@submit.prevent="sendFeedback"）。
+ * 成功后清空输入框并提示；提交人由后端从登录令牌识别，前端不需要传用户信息。
+ * 失败写入 errorMessage，最后在 finally 关闭 loading 恢复按钮。
+ */
+async function sendFeedback() {
+  // 先 trim 再判空：防止用户只输入空格也能通过表单的 required 校验。
+  if (!feedback.content.trim() || feedbackLoading.value) return
+  feedbackMessage.value = ''; errorMessage.value = ''; feedbackLoading.value = true
+  try { await submitFeedback(feedback.content); feedback.content = ''; feedbackMessage.value = '反馈已提交，感谢你的建议' }
+  catch (error) { errorMessage.value = error instanceof Error ? error.message : '反馈提交失败' }
+  finally { feedbackLoading.value = false }
 }
 
 /**
@@ -98,6 +119,13 @@ async function deleteAccount() {
       <label>确认新密码<input v-model="password.confirmPassword" required minlength="8" maxlength="16" type="password" /></label>
       <p v-if="passwordMessage" class="success-message">{{ passwordMessage }}</p>
       <div class="form-actions"><button class="primary-button" :disabled="passwordLoading">{{ passwordLoading ? '修改中...' : '修改密码' }}</button></div>
+    </form>
+    <!-- 意见反馈表单：把用户输入交给 sendFeedback 调 POST /feedbacks；maxlength 与后端 varchar(1000) 对齐 -->
+    <form class="panel item-form" @submit.prevent="sendFeedback">
+      <h2>意见反馈</h2>
+      <label>反馈内容<textarea v-model="feedback.content" required maxlength="1000" placeholder="说说你遇到的问题，或希望平台改进的地方"></textarea></label>
+      <p v-if="feedbackMessage" class="success-message">{{ feedbackMessage }}</p>
+      <div class="form-actions"><button class="primary-button" :disabled="feedbackLoading">{{ feedbackLoading ? '提交中...' : '提交反馈' }}</button></div>
     </form>
     <!-- 账号操作区（危险操作）：注销按钮显式 type="button"，避免误触发表单提交，点击调用 deleteAccount -->
     <section class="panel item-form danger-zone"><h2>账号操作</h2><p class="muted">注销账号会隐藏你发布的帖子和评论，且需要通过申诉流程恢复。</p><button class="text-button" type="button" @click="deleteAccount">注销我的账号</button></section>
