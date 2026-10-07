@@ -190,3 +190,19 @@ export interface LocationGroup {
   // 该校区下的地点列表
   locations: Location[]
 }
+
+/**
+ * 全站公告（由管理员发布，所有人可见，未登录也能查看）。
+ */
+export interface Announcement {
+  // 公告主键
+  id: number
+  // 公告标题
+  title: string
+  // 公告正文
+  content: string
+  // 发布管理员姓名（后端按 admin_id 关联用户表回填，直接展示；缺失时为 undefined）
+  authorName?: string
+  // 发布时间
+  createdAt: string
+}

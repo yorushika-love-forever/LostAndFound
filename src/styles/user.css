@@ -15,6 +15,11 @@
 .conversation-actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
 /* 详情页「收藏 / 取消收藏」按钮所在行：与下方认领按钮保持同样的间距节奏。 */
 .detail-actions { display: flex; align-items: center; gap: 12px; margin: 4px 0 14px; }
+/* 公告页：列表容器限宽，单条公告用卡片承载，正文保留换行。 */
+.announcement-list { max-width: 820px; }
+.announcement-card { padding: 24px; margin-bottom: 18px; }
+.announcement-card h2 { font-size: 22px; margin-bottom: 6px; }
+.announcement-content { margin: 14px 0 0; line-height: 1.8; color: #586960; white-space: pre-wrap; }
 .comments-section { max-width: 820px; margin: 64px auto 0; }
 .comment-form { padding: 20px; }
 .comment-list { border-top: 1px solid #d8d5ca; }

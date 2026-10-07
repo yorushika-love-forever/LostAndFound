@@ -41,6 +41,8 @@ function handleLogout() {
         <!-- :class 绑定一个对象：键是类名、值是布尔，为真时加上 active 类来高亮当前项。
              这里直接比较 route.path 而不用额外状态，简单直观。 -->
         <RouterLink to="/home" :class="{ active: route.path === '/home' }">浏览信息</RouterLink>
+        <!-- 公告页不需要登录即可访问，但入口放在这一排「登录后才显示」的导航里，方便登录用户查看。 -->
+        <RouterLink to="/announcements" :class="{ active: route.path === '/announcements' }">公告</RouterLink>
         <RouterLink to="/publish" :class="{ active: route.path === '/publish' }">发布信息</RouterLink>
         <RouterLink to="/mine" :class="{ active: route.path === '/mine' }">我的记录</RouterLink>
         <!-- 「消息」与「我的记录」都指向 /mine，靠 query 的 tab=claims 加以区分。

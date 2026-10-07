@@ -88,6 +88,9 @@ const router = createRouter({
     // meta 是路由附加信息。requiresAuth 用来标记“这个页面必须登录”。
     { path: '/home', 
       component: () => import('@/views/user/HomeView.vue'), meta: { requiresAuth: true, title: '浏览信息' } },
+    // 公告页刻意不设 requiresAuth：后端 /announcements 是公开接口，未登录也应能查看公告。
+    { path: '/announcements',
+      component: () => import('@/views/user/AnnouncementView.vue'), meta: { title: '全站公告' } },
     // :id 是动态路由参数，例如访问 /items/8 时，组件里可用 route.params.id 取到 '8'。
     { path: '/items/:id', 
       component: () => import('@/views/user/ItemDetailView.vue'), meta: { requiresAuth: true, title: '物品详情' } },
