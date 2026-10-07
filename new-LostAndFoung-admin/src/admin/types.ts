@@ -51,31 +51,25 @@ export interface AdminFeedback {
   updated_at?: string
 }
 
-// 当前服务器还没有 /admin/claims，因此页面会先显示“后端未开放”。
-export type ClaimStatus = 'pending' | 'approved' | 'rejected'
-
-export interface AdminClaim {
+export interface AdminAppeal {
   id: number | string
-  post_id: number | string
-  post_title?: string
-  applicant_name?: string
-  description?: string
-  status: ClaimStatus
-  created_at?: string
+  user_id: number | string
+  reason: string
+  content: string
+  status: string
+  created_at: string
+  updated_at?: string
 }
-
-// 公告接口现在也没有部署。
-// 如果后端返回字段不同，只改这里和 api/admin.ts 的映射。
-export type AnnouncementStatus = 'draft' | 'published'
 
 export interface AdminAnnouncement {
   id: number | string
   title: string
   content: string
-  status: AnnouncementStatus
   admin_id?: number | string
   author_name?: string
   created_at: string
+  updated_at?: string
+  deleted_at?: string | null
 }
 
 export interface PageResult<T> {
@@ -86,8 +80,10 @@ export interface PageResult<T> {
 }
 
 export interface DashboardOverview {
-  total_posts: number
-  pending_posts: number
-  approved_posts: number
-  rejected_posts: number
+  user_count: number
+  post_count: number
+  pending_post_count: number
+  pending_appeal_count: number
+  today_post_count: number
+  today_comment_count: number
 }

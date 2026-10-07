@@ -6,7 +6,8 @@ import axios, {
 
 interface ApiEnvelope<T> {
   code: number
-  msg: string
+  msg?: string
+  message?: string
   data: T
 }
 
@@ -47,16 +48,17 @@ service.interceptors.response.use(
     }
 
     return Promise.reject(
-      new ApiError(result.code, result.msg || '请求失败'),
+      new ApiError(result.code, result.message || result.msg || '请求失败'),
     )
   },
   (error) => {
     const status = error.response?.status as number | undefined
     const body = error.response?.data as
-      | { code?: number; msg?: string }
+      | { code?: number; msg?: string; message?: string }
       | undefined
     const message =
       body?.msg ||
+      body?.message ||
       (status === 401
         ? '登录状态已失效，请重新登录'
         : status === 404
