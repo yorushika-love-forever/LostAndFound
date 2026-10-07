@@ -1,9 +1,11 @@
 <!--
   物品详情页（路由：`/items/:id`，受登录保护，见 router/index.ts）。
   作用：展示单条物品的图片、描述、发布信息；提供「申请认领 / 召领」表单；下方展示并管理评论。
-  读取接口：getItem(id)（`GET /posts/:id`）、getComments(id)（`GET /posts/:id/comments`）。
-  写入接口：createClaim()（发起会话）、createComment() / deleteComment()。
-  主要交互：展开认领表单、提交认领后跳转会话页、发表评论、删除自己的评论；
+  读取接口：getItem(id)（`GET /posts/:id`）、getComments(id)（`GET /posts/:id/comments`）、
+           getFavoriteItems()（`GET /auth/profile` 的收藏夹，仅用于判断本条目是否已被收藏）。
+  写入接口：createClaim()（发起会话）、createComment() / deleteComment()、
+           addFavorite() / removeFavorite()（收藏 / 取消收藏）。
+  主要交互：收藏 / 取消收藏、展开认领表单、提交认领后跳转会话页、发表评论、删除自己的评论；
   是否显示删除按钮由评论的 userId 与当前登录用户比较决定。
 -->
 <script setup lang="ts">
@@ -11,7 +13,7 @@ import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createClaim } from '@/api/conversations'
 import { createComment, deleteComment, getComments } from '@/api/comments'
-import { getItem } from '@/api/posts'
+import { addFavorite, getItem, getFavoriteItems, removeFavorite } from '@/api/posts'
 import { useAuth } from '@/stores/auth'
 import type { Comment, LostItem } from '@/types'
 import { formatDate, itemStatusText } from '@/utils/format'
@@ -42,6 +44,13 @@ const submittingClaim = ref(false)
 const submittingComment = ref(false)
 // 记录正在删除的评论 id（null 表示无）：只禁用被删那条的按钮，其余评论仍可操作。
 const deletingCommentId = ref<number | null>(null)
+// 当前条目是否已被我收藏。后端帖子本身不带 is_favorited 字段，只能在挂载时
+// 拉一次「我的收藏」逐条比对得出初值，之后由 toggleFavorite 的返回值维护。
+const favorited = ref(false)
+// 收藏请求进行中标记：用于禁用按钮，防止网络慢时连点造成「收藏/取消」来回发请求。
+const favoriteLoading = ref(false)
+// 收藏操作的错误提示；与 message / commentError 分开，互不覆盖。
+const favoriteError = ref('')
 // 路由参数是字符串，转成 number 再传给接口；`/items/:id` 里的 id 就来自这里。
 const itemId = Number(route.params.id)
 
@@ -64,7 +73,43 @@ onMounted(async () => {
     loading.value = false
     commentsLoading.value = false
   }
+
+  // 收藏初值单独请求、单独 try/catch：详情已经渲染成功了，
+  // 不能因为这一次「查收藏夹」失败就把整页判为加载失败，
+  // 失败时保持「未收藏」的默认态即可（点收藏仍会按后端真实结果纠正）。
+  if (item.value) {
+    try {
+      // some() 只要找到同 id 的收藏就返回 true，比 filter 更早短路、也无额外数组开销。
+      favorited.value = (await getFavoriteItems()).some((favorite) => favorite.id === itemId)
+    } catch {
+      // 故意静默：收藏状态属于锦上添花的信息，失败不打扰用户。
+    }
+  }
 })
+
+/**
+ * 切换收藏 / 取消收藏。
+ * 触发时机：点击详情页的收藏按钮。
+ * 逻辑：按当前 favorited 反向调用 remove/add 接口，并用「后端返回的 favorited」覆盖本地状态，
+ *      而不是本地取反——这样即便本地状态与服务端不一致（比如另一台设备刚改过），
+ *      也能被后端返回值纠正回来。
+ * 失败：写入 favoriteError 提示；finally 复位 favoriteLoading 恢复按钮可点。
+ */
+async function toggleFavorite() {
+  // 详情未就绪或请求进行中直接返回，避免用空 item 调接口 / 重复提交。
+  if (!item.value || favoriteLoading.value) return
+  favoriteLoading.value = true
+  favoriteError.value = ''
+  try {
+    favorited.value = favorited.value
+      ? await removeFavorite(item.value.id)
+      : await addFavorite(item.value.id)
+  } catch (error) {
+    favoriteError.value = error instanceof Error ? error.message : '收藏操作失败'
+  } finally {
+    favoriteLoading.value = false
+  }
+}
 
 /**
  * 提交认领 / 召领申请。
@@ -154,6 +199,13 @@ async function removeComment(id: number) {
         <div><dt>状态</dt><dd>{{ item.isFinished ? '已完成' : itemStatusText(item.status) }}</dd></div>
         <div><dt>发布者</dt><dd>{{ item.publisherName }}</dd></div>
       </dl>
+      <!-- 收藏 / 取消收藏：任何登录用户（含发布者本人）都能收藏。
+           按钮样式随 favorited 切换（已收藏=实心主按钮，未收藏=描边次按钮），
+           :disabled 在请求进行中禁用，避免连点发出多次收藏/取消请求。 -->
+      <div class="detail-actions">
+        <button :class="favorited ? 'primary-button' : 'secondary-button'" :disabled="favoriteLoading" @click="toggleFavorite">{{ favoriteLoading ? '处理中...' : favorited ? '已收藏' : '收藏此条' }}</button>
+      </div>
+      <p v-if="favoriteError" class="error-message">{{ favoriteError }}</p>
       <!-- 三个条件同时满足才显示认领按钮：不是自己发布的、已审核通过、且未完成 -->
       <button v-if="item.publisherId !== user?.id && item.status === 'approved' && !item.isFinished" class="primary-button" @click="showClaimForm = !showClaimForm">申请认领 / 召领</button>
       <p v-if="item.publisherId === user?.id" class="muted">这是你发布的信息。</p>

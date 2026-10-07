@@ -4,7 +4,8 @@
  * 使用方：HomeView（列表与筛选）、ItemDetailView（详情/发布）、个人中心（我的帖子）等。
  * 依赖：./http 的 request()/requestAllPages()；后端路由挂在 /posts 下。
  * 本文件是「后端 snake_case ↔ 前端 camelCase」转换约定的核心示例（见 BackendPost / mapPost）。
- * 对外导出：BackendPost、mapPost、getItems、getItem、createItem、getMyItems、deletePost、recoverPost。
+ * 对外导出：BackendPost、mapPost、getItems、getItem、createItem、getMyItems、deletePost、recoverPost、
+ *          addFavorite、removeFavorite、getFavoriteItems。
  */
 import { request, requestAllPages } from './http'
 import type { ItemForm, ItemQuery, LostItem } from '@/types'
@@ -152,4 +153,55 @@ export async function deletePost(id: number): Promise<void> {
  */
 export async function recoverPost(id: number): Promise<void> {
   await request(`/posts/${id}/recover`, { method: 'PATCH' })
+}
+
+/**
+ * 后端「收藏 / 取消收藏」的返回结构（snake_case）。
+ * 后端两个接口（POST 收藏、DELETE 取消）返回同一形状，只有 favorited 的布尔值不同，
+ * 且都是幂等的——重复收藏 / 重复取消不会报错，因此前端可以放心地把返回值当作最终状态。
+ */
+export interface BackendFavoriteResult {
+  post_id: number | string
+  favorited: boolean
+}
+
+/**
+ * 收藏帖子：POST /api/v1/posts/:id/favorite
+ *
+ * 幂等：已收藏时再调用依然是「已收藏」，不会重复插入收藏记录。
+ * @param id 帖子 ID
+ * @returns 收藏后的状态（true 表示已收藏），以后端返回为准而非前端自行推断
+ * @throws 未登录或接口失败时抛 Error
+ */
+export async function addFavorite(id: number): Promise<boolean> {
+  const result = await request<BackendFavoriteResult>(`/posts/${id}/favorite`, { method: 'POST' })
+  return result.favorited
+}
+
+/**
+ * 取消收藏帖子：DELETE /api/v1/posts/:id/favorite
+ *
+ * 幂等：未收藏时再调用也不会报错。
+ * @param id 帖子 ID
+ * @returns 取消后的状态（false 表示未收藏）
+ * @throws 未登录或接口失败时抛 Error
+ */
+export async function removeFavorite(id: number): Promise<boolean> {
+  const result = await request<BackendFavoriteResult>(`/posts/${id}/favorite`, { method: 'DELETE' })
+  return result.favorited
+}
+
+/**
+ * 获取当前用户收藏的帖子列表：GET /api/v1/auth/profile（取其 favorites 字段）
+ *
+ * 后端没有独立的「收藏列表」接口，收藏夹随「我的资料」一起返回，故这里复用同一个接口。
+ * 注意：favorites 的元素结构与 posts 完全一致（都是 model.Post），可直接复用 mapPost。
+ * @returns 当前用户收藏的 LostItem 数组（后端按收藏时间倒序返回）
+ * @throws 未登录/接口失败时抛 Error
+ */
+export async function getFavoriteItems(): Promise<LostItem[]> {
+  const data = await request<{ favorites: BackendPost[] | null }>('/auth/profile')
+  // 一条收藏都没有时后端返回的 favorites 是 JSON null（Go 的 nil slice），必须兜底成空数组，
+  // 否则后面的 .map 会抛「Cannot read properties of null」。
+  return (data.favorites || []).map(mapPost)
 }
