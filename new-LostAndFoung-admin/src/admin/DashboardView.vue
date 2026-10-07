@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { getPostsApi, getStatsApi } from '@/api/admin'
+import { getAdminCountApi, getPostsApi } from '@/api/admin'
+import { getAdminUser } from '@/admin/auth'
 import { backendSupport } from '@/admin/config'
 import BarChart from '@/admin/BarChart.vue'
 import { formatDate, postStatusText } from '@/admin/format'
 import type { AdminPost, DashboardOverview } from '@/admin/types'
 
-const overview = ref<DashboardOverview>({
-  total_posts: 0,
-  pending_posts: 0,
-  approved_posts: 0,
-  rejected_posts: 0,
+const currentUser = getAdminUser()
+const isMainAdmin = currentUser?.role === 'mainadmin'
+const adminCount = ref<DashboardOverview>({
+  user_count: 0,
+  post_count: 0,
+  pending_post_count: 0,
+  pending_appeal_count: 0,
+  today_post_count: 0,
+  today_comment_count: 0,
 })
 const allPosts = ref<AdminPost[]>([])
 const pendingPosts = ref<AdminPost[]>([])
@@ -18,11 +23,21 @@ const loading = ref(false)
 const errorMessage = ref('')
 
 const approvalRate = computed(() => {
-  if (overview.value.total_posts === 0) return '0%'
+  if (allPosts.value.length === 0) return '0%'
 
-  return `${Math.round(
-    (overview.value.approved_posts / overview.value.total_posts) * 100,
-  )}%`
+  const approved = allPosts.value.filter(
+    (post) => post.status === 'approved',
+  ).length
+
+  return `${Math.round((approved / allPosts.value.length) * 100)}%`
+})
+
+const postTotal = computed(() => allPosts.value.length)
+const pendingTotal = computed(() => {
+  return allPosts.value.filter((post) => post.status === 'pending').length
+})
+const approvedTotal = computed(() => {
+  return allPosts.value.filter((post) => post.status === 'approved').length
 })
 
 const typeChartItems = computed(() => {
@@ -119,34 +134,21 @@ async function loadAllPosts() {
   return list
 }
 
-async function loadOverview(posts: AdminPost[]) {
-  // 当前服务器的 /admin/stats 还是 404。
-  // 所以先通过帖子列表统计。等后端补好后，把 config.ts 的 statistics 改成 true。
-  if (backendSupport.statistics) {
-    return getStatsApi()
-  }
-
-  return {
-    total_posts: posts.length,
-    pending_posts: posts.filter((post) => post.status === 'pending').length,
-    approved_posts: posts.filter((post) => post.status === 'approved').length,
-    rejected_posts: posts.filter((post) => post.status === 'rejected').length,
-  }
-}
-
 async function loadDashboard() {
   loading.value = true
   errorMessage.value = ''
 
   try {
     const posts = await loadAllPosts()
-    const overviewData = await loadOverview(posts)
 
     allPosts.value = posts
-    overview.value = overviewData
     pendingPosts.value = posts
       .filter((post) => post.status === 'pending')
       .slice(0, 5)
+
+    if (isMainAdmin && backendSupport.statistics) {
+      adminCount.value = await getAdminCountApi()
+    }
   } catch (error) {
     errorMessage.value =
       error instanceof Error ? error.message : '数据加载失败'
@@ -163,23 +165,50 @@ onMounted(loadDashboard)
     <h2 class="page-title">数据总览</h2>
 
     <p v-if="errorMessage" class="error-text">{{ errorMessage }}</p>
-    <p v-if="!backendSupport.statistics" class="stats-note">
-      当前图表基于帖子数据统计。用户、认领和公告的完整全校统计，
-      需要后端提供统计接口。
+    <p v-if="!isMainAdmin" class="stats-note">
+      当前账号展示帖子统计。系统管理员登录后可以看到用户、申诉、
+      今日帖子和今日评论统计。
     </p>
 
-    <div class="card-grid">
+    <div v-if="isMainAdmin" class="card-grid">
+      <div class="stat-card">
+        <span>用户总数</span>
+        <strong>{{ adminCount.user_count }}</strong>
+      </div>
+      <div class="stat-card">
+        <span>帖子总数</span>
+        <strong>{{ adminCount.post_count }}</strong>
+      </div>
+      <div class="stat-card">
+        <span>待审核帖子</span>
+        <strong>{{ adminCount.pending_post_count }}</strong>
+      </div>
+      <div class="stat-card">
+        <span>待处理申诉</span>
+        <strong>{{ adminCount.pending_appeal_count }}</strong>
+      </div>
+      <div class="stat-card">
+        <span>今日新帖</span>
+        <strong>{{ adminCount.today_post_count }}</strong>
+      </div>
+      <div class="stat-card">
+        <span>今日评论</span>
+        <strong>{{ adminCount.today_comment_count }}</strong>
+      </div>
+    </div>
+
+    <div v-else class="card-grid">
       <div class="stat-card">
         <span>信息总量</span>
-        <strong>{{ overview.total_posts }}</strong>
+        <strong>{{ postTotal }}</strong>
       </div>
       <div class="stat-card">
         <span>待审核</span>
-        <strong>{{ overview.pending_posts }}</strong>
+        <strong>{{ pendingTotal }}</strong>
       </div>
       <div class="stat-card">
         <span>已通过</span>
-        <strong>{{ overview.approved_posts }}</strong>
+        <strong>{{ approvedTotal }}</strong>
       </div>
       <div class="stat-card">
         <span>通过率</span>
