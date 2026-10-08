@@ -276,8 +276,10 @@ npm run build
 
 ### 2. 上传静态文件并修正权限
 
+手动上传（把 `<前端服务器IP>` 换成你自己的真实地址）：
+
 ```powershell
-scp -r "dist\*" root@120.26.56.74:/var/www/pickup/
+scp -r "dist\*" root@<前端服务器IP>:/var/www/pickup/
 ```
 
 上传后必须修正文件权限，否则 Caddy 以 `caddy` 用户运行时读不到文件，页面会白屏：
@@ -293,11 +295,11 @@ chmod -R a+rX /var/www/pickup
     encode gzip
 
     handle /api/* {
-        reverse_proxy 121.40.225.123:8080
+        reverse_proxy <后端公网IP>:8080
     }
 
     handle /uploads/* {
-        reverse_proxy 121.40.225.123:8080
+        reverse_proxy <后端公网IP>:8080
     }
 
     handle {
@@ -314,7 +316,7 @@ chmod -R a+rX /var/www/pickup
 - `try_files {path} /index.html` 是 SPA 路由回退，缺少它时刷新 `/mine` 等路径会 404。
 - `/uploads/*` 必须一起反代，否则帖子图片加载不出来。
 - 后端已移除 CORS，浏览器只同源访问前端，跨域问题由这层反向代理消除。
-- 本项目前后端**不同机**部署，Caddy 直连后端公网地址 `121.40.225.123:8080`；建议用安全组把后端 8080 限制为只允许前端这台机器访问。
+- 本项目前后端**不同机**部署，Caddy 直连后端公网地址 `<后端公网IP>:8080`（真实地址不写入仓库，见下方 `deploy.config.ps1`）；**务必用安全组把后端 8080 的入方向限制为只允许前端这台机器访问**，否则后端一旦暴露，任何人都能绕过前端直接打 API。
 
 修改配置后重载：
 
@@ -352,13 +354,15 @@ curl -I http://<服务器IP>/mine                               # 期望 200
 powershell -ExecutionPolicy Bypass -File .\deploy.ps1
 ```
 
-脚本配置区可修改服务器 IP、用户名和远端目录：
+脚本本身**不含任何服务器地址**（本仓库为公开仓库，写死公网 IP 会被扫描全网与 GitHub 的爬虫收录，带来异常访问与流量费用）。首次使用需在同目录创建 `deploy.config.ps1`：
 
 ```powershell
-$ServerIP   = "120.26.56.74"        # 云服务器公网 IP
-$ServerUser = "root"                # 登录用户名
-$RemoteDir  = "/var/www/pickup"     # 服务器上的网站目录
+$ServerIP   = "你的服务器公网 IP"
+$ServerUser = "root"
+$RemoteDir  = "/var/www/pickup"
 ```
+
+`deploy.config.ps1` 已在 `.gitignore` 中，不会被提交；仓库里只提交 `deploy.ps1` 脚本本身。未创建该文件时脚本会给出提示并退出，不会带着空地址去连服务器。
 
 部署完成后浏览器需按 **Ctrl + Shift + R** 强制刷新（脚本也会提示）。更新前端**不需要**重装 Caddy、不需要改 Caddyfile、不需要动安全组。
 

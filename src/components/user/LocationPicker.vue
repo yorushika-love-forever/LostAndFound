@@ -106,7 +106,7 @@ function geolocationErrorMessage(code: number): string {
  *          否则在 form 内会被当成提交按钮，点一下就把表单提交了）。
  *
  * 关键限制：浏览器只在「安全上下文」（HTTPS 或 localhost）才允许定位。
- * 生产上若用 http://<公网IP> 访问（本项目的 120.26.56.74 就是这种），
+ * 生产上若用 http://<公网IP> 这种明文地址访问（本项目早期就是这么部署的），
  * getCurrentPosition 必然失败。因此这里先判 window.isSecureContext 提前拦下，
  * 直接说明真实原因，而不是让用户看到一条看不出所以然的失败提示。
  */

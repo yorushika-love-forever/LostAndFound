@@ -23,19 +23,20 @@
 # skip_install_trust 表示不把内置 CA 装进「服务器本机」的信任库 ——
 #   装了也只对服务器自己生效，访问端浏览器该不信任还是不信任。
 #
-# 注意：站点地址这里写的是字面量 IP，而不是参考实现里的 {$SITE_ADDRESS} 环境变量。
-#   因为参考实现跑在 Docker 里（可在 compose 中注入环境变量），而本项目是裸机 systemd 运行，
-#   环境变量没配的话 {$SITE_ADDRESS} 会展开成空串，站点块直接失效。
-#   换服务器时改这里的 IP 即可（deploy.ps1 顶部的 $ServerIP 也要同步改）。
+# 【为什么不写死 IP】站点地址与后端地址一律用环境变量占位：
+#   本仓库是公开仓库，把真实公网 IP 提交进去，会被专门扫描 GitHub 与全网 IP 段的
+#   爬虫/机器人收录，进而引来异常访问与流量费用（按流量计费的实例尤其吃亏）。
+#   做法与参考实现一致（参考实现用 {$SITE_ADDRESS}）。
+#   裸机 systemd 部署下环境变量怎么注入，见文件末尾「第 0 步」。
 # ============================================================================
 {
-	default_sni 120.26.56.74
+	default_sni {$SITE_ADDRESS}
 	skip_install_trust
 }
 
-# 站点地址写 IP（不带方案）：Caddy 会自动监听 443 提供 HTTPS，
+# 站点地址由环境变量提供（不带方案）：Caddy 会自动监听 443 提供 HTTPS，
 # 同时在 80 端口上自动加一条跳转到 HTTPS 的规则，无需手写 redir。
-120.26.56.74 {
+{$SITE_ADDRESS} {
 	tls internal
 
 	# root 必须放在站点级别：它是后续 file_server 与 try_files 的根目录。
@@ -51,7 +52,8 @@
 	# handle_path 会剥掉匹配到的前缀（/api/v1/posts 变成 /v1/posts），后端就会 404。
 	@backend path /api/* /uploads/*
 	handle @backend {
-		reverse_proxy 121.40.225.123:8080
+		# 后端地址同样来自环境变量（形如 1.2.3.4:8080，若同机部署可写 127.0.0.1:8080）。
+		reverse_proxy {$BACKEND_ADDRESS}
 	}
 
 	# ---- 管理端 SPA（独立工程，打包产物在 /admin/ 子目录）----
@@ -75,6 +77,19 @@
 # ============================================================================
 # 部署到服务器后的操作清单
 #
+# 0) 【必须先做】注入两个环境变量。不注入的话本文件里的 {$SITE_ADDRESS} 会展开成
+#    空串，站点块失效，caddy validate 直接报错。
+#    用 systemd drop-in 给 Caddy 服务加环境变量（不会改动 Caddy 自带的 service 文件）：
+#      sudo systemctl edit caddy
+#    在打开的编辑器里填入（地址换成你自己的真实值，注意去掉尖括号）：
+#      [Service]
+#      Environment="SITE_ADDRESS=<前端服务器公网IP>"
+#      Environment="BACKEND_ADDRESS=<后端服务器公网IP>:8080"
+#    保存退出后使其生效：
+#      sudo systemctl daemon-reload
+#    验证变量已注入（应能看到上面两行）：
+#      systemctl show caddy -p Environment
+#
 # 1) 备份并替换配置（切勿直接覆盖，出问题要能退回）：
 #      sudo cp /etc/caddy/Caddyfile /etc/caddy/Caddyfile.bak
 #      sudo nano /etc/caddy/Caddyfile        # 粘贴本文件内容
@@ -90,7 +105,7 @@
 # 4) 静态文件权限（Caddy 以 caddy 用户运行，必须可读；漏掉会白屏）：
 #      sudo chmod -R a+rX /var/www/pickup
 #
-# 5) 访问 https://120.26.56.74，点「继续访问」，然后在控制台确认：
+# 5) 访问 https://<你的站点地址>，点「继续访问」，然后在控制台确认：
 #      window.isSecureContext      → true
 #      'geolocation' in navigator  → true
 #    若 isSecureContext 仍为 false（少数浏览器对带证书错误的页面会这样），
@@ -101,4 +116,17 @@
 #
 # 6) 后端需为包含坐标转换的版本（提交 fe8e6e5，WGS-84 → GCJ-02）。
 #    否则定位虽然能用，但匹配到的地点在杭州一带会偏 400~600 米。
+#
+# 7) 防止陌生人刷流量（按流量计费时很重要）：
+#    a. 阿里云安全组把后端 8080 的入方向限制为「只允许前端这台机器的 IP」，
+#       而不是 0.0.0.0/0 —— 否则后端 IP 一旦泄露，任何人都能直接打 API。
+#    b. 阿里云控制台开启「流量/费用告警」（如每日 > 1GB 或消费 > 50 元时通知）。
+#    c. 非演示时段可以临时给站点加一层 Basic 认证，只让自己进得来：
+#         sudo caddy hash-password --plaintext '你的密码'      # 生成哈希
+#       然后把下面两行加到 {$SITE_ADDRESS} 块的最前面（hash 换成上一步的输出）：
+#         basicauth {
+#             你的用户名 <上一步生成的哈希>
+#         }
+#       reload 后浏览器会先要账号密码，爬虫和路人就被挡住了。
+#       演示前记得删掉这两行再 reload，否则评委也要输密码。
 # ============================================================================

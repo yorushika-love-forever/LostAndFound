@@ -15,6 +15,10 @@ dist-ssr
 coverage
 *.local
 
+# 本地部署配置：含服务器公网 IP 等敏感信息，只留在本机
+# （本仓库为公开仓库，提交上去会被扫描机器人收录，带来异常流量与费用）
+deploy.config.ps1
+
 
 # Editor directories and files
 .vscode/*

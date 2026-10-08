@@ -15,10 +15,33 @@
 # =============================================================
 
 # ---------------- 配置区（换服务器只需改这里） ----------------
-$ServerIP       = "120.26.56.74"           # 云服务器公网 IP
-$ServerUser     = "root"                   # 登录用户名
-$RemoteDir      = "/var/www/pickup"        # 学生端在服务器上的目录
-$AdminRemoteDir = "/var/www/pickup/admin"  # 管理端在服务器上的目录（子路径必须叫 admin）
+# 安全约定：本脚本会提交到公开仓库，真实服务器 IP 一律不写进来。
+# 公开仓库里的公网 IP 会被扫描 GitHub / 全网 IP 段的爬虫抓到并收录，
+# 随后就是莫名其妙的探测流量 —— 按流量计费的实例会因此产生额外费用。
+# 所以真实地址放在同目录的 deploy.config.ps1 里，该文件已被 .gitignore 忽略。
+#
+# 加载顺序：先执行 deploy.config.ps1（若存在），再用下面的默认值兜底。
+# 之所以放在脚本作用域内点源（. ），是为了让外部文件里赋的值能被本脚本读到。
+$LocalConfig = Join-Path $PSScriptRoot "deploy.config.ps1"
+if (Test-Path $LocalConfig) { . $LocalConfig }
+
+# 以下三项都有合理默认值，一般不必在 deploy.config.ps1 里重复配置。
+if (-not $ServerUser)     { $ServerUser     = "root" }                # 登录用户名
+if (-not $RemoteDir)      { $RemoteDir      = "/var/www/pickup" }     # 学生端在服务器上的目录
+if (-not $AdminRemoteDir) { $AdminRemoteDir = "/var/www/pickup/admin" } # 管理端目录（子路径必须叫 admin）
+
+# $ServerIP 故意不给默认值：它是必须由使用者提供的敏感信息。
+# 缺失时立刻退出并给出创建指引，而不是带着空地址去连服务器（那样报的错很难懂）。
+if (-not $ServerIP) {
+    Write-Host ""
+    Write-Host "未配置服务器地址，无法部署。" -ForegroundColor Red
+    Write-Host "请在脚本同目录创建 deploy.config.ps1（已被 .gitignore 忽略，不会提交），内容如下：" -ForegroundColor Red
+    Write-Host '    $ServerIP   = "你的服务器公网 IP"' -ForegroundColor Red
+    Write-Host '    $ServerUser = "root"' -ForegroundColor Red
+    Write-Host "填好后重新运行本脚本。" -ForegroundColor Red
+    Write-Host ""
+    exit 1
+}
 
 $ProjectDir = $PSScriptRoot                                    # 脚本所在目录（学生端项目根目录）
 $AdminDir   = Join-Path $ProjectDir "new-LostAndFoung-admin"   # 管理端子工程目录
@@ -121,7 +144,7 @@ Write-Host ""
 #    想清理可在服务器执行： rm -rf /var/www/pickup/assets /var/www/pickup/admin/assets
 # 2. 每次运行都要输密码（共 4 次：scp 学生端、ssh 建目录、scp 管理端、ssh 修权限）。想免密可配置 SSH 密钥：
 #      ssh-keygen -t ed25519
-#      type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh root@120.26.56.74 "cat >> ~/.ssh/authorized_keys"
+#      type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh root@<你的服务器IP> "cat >> ~/.ssh/authorized_keys"
 # 3. 管理端的后端地址由 new-LostAndFoung-admin\.env.development 控制，仅影响本地开发；
 #    线上管理端的接口走相对路径 /api/v1，由 Caddy 反向代理到后端。
 # -------------------------------------------------------------
