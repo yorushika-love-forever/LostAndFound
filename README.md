@@ -377,6 +377,69 @@ $RemoteDir  = "/var/www/pickup"
 | 图片显示为裂图           | 图片在数据库里存的是相对路径 `/uploads/...`，由 Caddy 的 `/uploads/*` 反向代理提供 | 检查 Caddyfile 的 `/uploads/*` 反向代理是否配置正确          |
 | 改了配置不生效           | 未重载 Caddy                                                 | `systemctl reload caddy`                                    |
 
+### 停用与恢复（服务器长期闲置时使用）
+
+验收或演示结束后，如果这台服务器要留到下次再用，按本节操作可以把**流量费与攻击面同时降到 0**，而母机、数据和配置全部保留。
+
+先明确一个前提：**本项目用的是包年包月实例，费用已预付到期，停不停机都不退钱**。所以省钱的着眼点不是「停机」，而是**切断公网访问**。不做这一步，站点就一直开着，任何人访问产生的**出方向**流量都按 0.80 元/GB（华东1 杭州）计费。
+
+#### 停用（三步）
+
+1. 登录服务器后停掉 Caddy，并取消开机自启：
+
+```bash
+sudo systemctl stop caddy
+sudo systemctl disable caddy     # 取消自启，防止实例重启后又跑起来
+```
+
+   `stop` 成功是静默无输出的；`disable` 会打印 `Removed '/etc/systemd/system/multi-user.target.wants/caddy.service'`。两者都属正常。
+
+2. 控制台 → 安全组 → 配置规则 → **入方向**，删除 **80** 和 **443** 两条规则。
+
+3. **22 端口的规则不要删**，否则你下次自己也无法 SSH 登录。
+
+完成后外网对站点完全无响应（连连接都建立不起来），流量费归零，同时管理员入口、API 也都不可达。实例保持「运行中」即可，**不需要停机**——包年包月停机不省钱，反而会连 SSH 一起失去。
+
+#### 恢复（下次要使用时）
+
+1. 安全组入方向加回 **80**、**443**（协议 TCP，授权对象 `0.0.0.0/0`）
+2. 启动 Caddy：
+
+```bash
+sudo systemctl enable --now caddy
+```
+
+3. **修改管理员密码**。本仓库历史提交中曾明文出现过管理员演示账号，站点重新对外之前必须改掉。先用旧密码换 token（`-k` 用于跳过自签名证书校验）：
+
+```bash
+curl -k -s -X POST "https://<前端服务器IP>/api/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"<管理员账号>","password":"<旧密码>"}'
+```
+
+   从返回体的 `data.access_token` 取出 token，再调用改密接口（新密码 8~16 位）：
+
+```bash
+curl -k -s -X PATCH "https://<前端服务器IP>/api/v1/auth/password" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <access_token>" \
+  -d '{"old_password":"<旧密码>","new_password":"<新密码>","confirm_password":"<新密码>"}'
+```
+
+4. 更新 Caddyfile 里的 `BACKEND_ADDRESS` 环境变量（后端服务器可能已更换公网 IP），然后 `sudo systemctl reload caddy`
+5. 验证：
+
+```bash
+systemctl is-active caddy          # 期望 active
+ss -tlnp | grep -E ':80|:443'      # 期望 80 与 443 都在监听
+```
+
+6. 若浏览器提示证书不受信任，重新导入自签名根证书。**HTTPS 是「一键定位」可用的前提**（浏览器只在安全上下文允许定位），导入步骤见仓库根目录 `Caddyfile` 末尾注释。若服务器公网 IP 有变动，根证书需要重新导入到每台演示设备。
+
+#### 到期提醒
+
+实例到期时间为 **2027-10-06**（见控制台「实例详情 → 到期时间」）。届时若已无需求，**直接不续费**即可，避免长期支出；以后需要再用时按首次部署流程重建即可——代码都在仓库里，重建成本很低。
+
 ## 当前未完成范围
 
 以下内容属于管理员端，不在当前学生端实现范围内（相关目录为占位）：
